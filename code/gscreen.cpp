@@ -56,7 +56,9 @@
 #include "_xmouse.h"
 #include "bench.h"
 #include "cctooltip.h"
+#include "dsurface.h"
 #include "gadget.h"
+#include "globals.h"
 #include "goptions.h"
 #include "keyboard.h"
 #include "savestream.h"
@@ -395,8 +397,21 @@ void GScreenClass::Render(void)
 
 	TacticalMap->Render(*CompositeSurface, redraw, DRAW_PASS_PAN);
 	TacticalMap->Render(*CompositeSurface, redraw, DRAW_PASS_BACKGROUND);
+
+	/*
+	 * While the interface has a surface of its own, the map shows through wherever the
+	 * interface leaves the transparent color over the view.
+	 */
+	Surface * ui_surface = Tactical_UI_Surface();
+	if (ui_surface != CompositeSurface) {
+		ui_surface->Fill_Rect(TacticalScreenRect, VIDEO_TRANSPARENT_PIXEL);
+	}
+
+	LogicalSurface = ui_surface;
 	Draw_It(complete);
+	LogicalSurface = CompositeSurface;
 	TacticalMap->Render(*CompositeSurface, redraw, DRAW_PASS_FOREGROUND);
+	LogicalSurface = ui_surface;
 
 	if (Buttons) Buttons->Draw_All(false);
 
@@ -477,6 +492,109 @@ void Heal_Dialog_Controls(void)
 
 
 /// <summary>
+/// Fetches the surface the interface over the tactical map is drawn on.
+/// </summary>
+/// <returns>A surface of its own while the interface is scaled apart from the map, and the
+/// map's composite otherwise. The composite trades places with the tile surface as the map
+/// scrolls, so the result holds only until the map is next drawn.</returns>
+Surface * Tactical_UI_Surface(void)
+{
+	return(TacticalUISurface != NULL ? TacticalUISurface : CompositeSurface);
+}
+
+
+/// <summary>
+/// Narrows a surface's rectangle about its middle to the tactical map's zoom.
+/// </summary>
+static Rect Zoomed_Source_Rect(Surface * surface)
+{
+	int zoom_surface_width = surface->Get_Width();
+	int zoom_surface_height = surface->Get_Height();
+
+	Rect tmp;
+	double zoomed_width = (double)zoom_surface_width / TacticalMap->ZoomFactor;
+	tmp.X = (int)(((double)zoom_surface_width - zoomed_width) / 2.0);
+	double zoomed_height = (double)zoom_surface_height / TacticalMap->ZoomFactor;
+	tmp.Y = (int)(((double)zoom_surface_height - zoomed_height) / 2.0);
+	tmp.Width = (int)zoomed_width;
+	tmp.Height = (int)zoomed_height;
+
+	return(tmp);
+}
+
+
+/// <summary>
+/// Presents the game screen while the interface is scaled apart from the tactical map.
+/// The interface over the view goes into the visible surface, and the map goes to the
+/// presenter as a picture of its own to show beneath it, so screen shake moves the map
+/// alone.
+/// </summary>
+static void Present_Tactical_Layers(Surface & ui_surface)
+{
+	Rect dest_rect(0, 0, ui_surface.Get_Width(), ui_surface.Get_Height());
+
+	if (!Options.IsSidebarOnRight && !Debug_Map) {
+		dest_rect.X += std::max(std::min(SidebarSurface->Get_Width(), VisibleRect.Width - dest_rect.Width), 0);
+	}
+
+	VisibleSurface->Blit_From(dest_rect, ui_surface, ui_surface.Get_Rect(), false, true);
+
+	Rect source_rect = CompositeSurface->Get_Rect();
+	if (TacticalMap && (TacticalMap->ZoomFactor != 1.0)) {
+		source_rect = Zoomed_Source_Rect(CompositeSurface);
+	}
+
+	Video_Show_World(*CompositeSurface, source_rect, TacticalScreenRect, Map.ScreenX, Map.ScreenY);
+
+	Heal_Dialog_Controls();
+	Video_Present_If_Dirty();
+}
+
+
+/// <summary>
+/// Puts the tactical map into the holes the interface leaves for it in a copy of the visible
+/// surface. While the interface is scaled, the visible surface holds the transparent color
+/// wherever the map shows through, so a capture needs the map stretched in to match the
+/// screen. Anything else is left alone.
+/// </summary>
+/// <param name="surface">A copy of the visible surface, laid out as it is.</param>
+void Fill_Tactical_Holes(Surface & surface)
+{
+	if (!ScenarioActive || CompositeSurface == NULL || Tactical_UI_Surface() == CompositeSurface) {
+		return;
+	}
+
+	Rect area = Intersect(TacticalScreenRect, surface.Get_Rect());
+	if (!area.Is_Valid()) {
+		return;
+	}
+
+	DSurface map(TacticalScreenRect.Width, TacticalScreenRect.Height);
+	if (!map.Blit_From(map.Get_Rect(), *CompositeSurface, CompositeSurface->Get_Rect())) {
+		return;
+	}
+
+	unsigned char * dest = (unsigned char *)surface.Lock();
+	unsigned char const * source = (unsigned char const *)map.Lock();
+
+	if (dest != NULL && source != NULL) {
+		for (int y = area.Y; y < area.Y + area.Height; y++) {
+			unsigned short * dest_row = (unsigned short *)(dest + y * surface.Stride());
+			unsigned short const * source_row = (unsigned short const *)(source + (y - TacticalScreenRect.Y) * map.Stride());
+			for (int x = area.X; x < area.X + area.Width; x++) {
+				if (dest_row[x] == VIDEO_TRANSPARENT_PIXEL) {
+					dest_row[x] = source_row[x - TacticalScreenRect.X];
+				}
+			}
+		}
+	}
+
+	map.Unlock();
+	surface.Unlock();
+}
+
+
+/// <summary>
 /// Presents a rendered surface onto the visible surface.
 /// This is the low level routine that gets a finished frame in front of the player. The
 /// destination is the visible surface, adjusted for the screen shake and for a sidebar
@@ -488,6 +606,14 @@ void Heal_Dialog_Controls(void)
 void Update_Visible_Surface(Surface *surface, Rect *rect)
 {
 	Rect fill_rect;
+
+	Surface * ui_surface = Tactical_UI_Surface();
+	if (surface == CompositeSurface && ui_surface != CompositeSurface) {
+		Present_Tactical_Layers(*ui_surface);
+		return;
+	}
+
+	Video_Hide_World();
 
 	if (rect == NULL) {
 		fill_rect = surface->Get_Rect();
@@ -527,21 +653,7 @@ void Update_Visible_Surface(Surface *surface, Rect *rect)
 	/// Apply zoom factor if tactical map is zoomed
 	if (TacticalMap && (TacticalMap->ZoomFactor != 1.0)) {
 
-		/*
-		 * Compute zoomed source rect centered
-		 */
-		int zoom_surface_width = surface->Get_Width();
-		int zoom_surface_height = surface->Get_Height();
-
-		Rect tmp;
-		double zoomed_width = (double)zoom_surface_width / TacticalMap->ZoomFactor;
-		tmp.X = (int)(((double)zoom_surface_width - zoomed_width) / 2.0);
-		double zoomed_height = (double)zoom_surface_height / TacticalMap->ZoomFactor;
-		tmp.Y = (int)(((double)zoom_surface_height - zoomed_height) / 2.0);
-		tmp.Width = (int)zoomed_width;
-		tmp.Height = (int)zoomed_height;
-
-		src_rect = tmp;
+		src_rect = Zoomed_Source_Rect(surface);
 
 	} else {
 

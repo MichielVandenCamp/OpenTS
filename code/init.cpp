@@ -118,6 +118,7 @@
 #include "gamedlg.h"
 #include "getcpu.h"
 #include "globals.h"
+#include "gscreen.h"
 #include "houstype.h"
 #include "incdec.h"
 #include "infatype.h"
@@ -164,6 +165,7 @@
 #include "session.h"
 #include "spawner.h"
 #include "side.h"
+#include "sidebar.h"
 #include "skirmish.h"
 #include "smudtype.h"
 #include "stimer.h"
@@ -182,6 +184,7 @@
 #include "unit.h"
 #include "unittype.h"
 #include "vein.h"
+#include "vidscale.h"
 #include "voc.h"
 #include "vox.h"
 #include "vqoption.h"
@@ -4879,6 +4882,7 @@ class ScreenCaptureCommandClass : public CommandClass
 
 				HiddenSurface->Blit_From(Rect(0, 0, HiddenSurface->Get_Width(), HiddenSurface->Get_Height()),
 					*VisibleSurface, dest_rect);
+				Fill_Tactical_Holes(*HiddenSurface);
 
 				Show_Mouse();
 
@@ -5933,9 +5937,11 @@ void Execute_Command(char const * name)
 /// <param name="composite_rect">The dimensions for the composite surface.</param>
 /// <param name="tile_rect">The dimensions for the tile surface.</param>
 /// <param name="sidebar_rect">The dimensions for the sidebar surface.</param>
+/// <param name="tactical_ui_rect">The dimensions for the surface the interface is drawn on
+/// over the tactical map, or an invalid rectangle to draw it onto the composite surface.</param>
 /// <param name="hidden_first">Should the hidden surface get first claim on video memory?</param>
 /// <returns>bool; Were the surfaces allocated?</returns>
-bool Allocate_Surfaces(const Rect & hidden_rect, const Rect & composite_rect, const Rect & tile_rect, const Rect & sidebar_rect, bool hidden_first)
+bool Allocate_Surfaces(const Rect & hidden_rect, const Rect & composite_rect, const Rect & tile_rect, const Rect & sidebar_rect, const Rect & tactical_ui_rect, bool hidden_first)
 {
 	bool success = true;
 
@@ -5971,6 +5977,12 @@ bool Allocate_Surfaces(const Rect & hidden_rect, const Rect & composite_rect, co
 		SidebarSurface = NULL;
 	}
 
+	if (TacticalUISurface != NULL) {
+		DebugString("Deleting TacticalUISurface\n");
+		delete TacticalUISurface;
+		TacticalUISurface = NULL;
+	}
+
 	if (hidden_first && hidden_rect.Is_Valid()) {
 		HiddenSurface = new DSurface(hidden_rect.Width, hidden_rect.Height);
 		assert(HiddenSurface != NULL);
@@ -6000,6 +6012,13 @@ bool Allocate_Surfaces(const Rect & hidden_rect, const Rect & composite_rect, co
 		DebugString("SidebarSurface (%dx%d)\n", sidebar_rect.Width, sidebar_rect.Height);
 	}
 
+	if (tactical_ui_rect.Is_Valid()) {
+		TacticalUISurface = new DSurface(tactical_ui_rect.Width, tactical_ui_rect.Height);
+		TacticalUISurface->Fill(0);
+
+		DebugString("TacticalUISurface (%dx%d)\n", tactical_ui_rect.Width, tactical_ui_rect.Height);
+	}
+
 	if (!hidden_first && hidden_rect.Is_Valid()) {
 		HiddenSurface = new DSurface(hidden_rect.Width, hidden_rect.Height);
 		HiddenSurface->Fill(0);
@@ -6017,6 +6036,28 @@ bool Allocate_Surfaces(const Rect & hidden_rect, const Rect & composite_rect, co
 
 
 	return(success);
+}
+
+
+/// <summary>
+/// Allocates the game's drawing surfaces for a screen of the visible size.
+/// The tactical map's surfaces are sized for the view as the map draws it, which differs
+/// from the view on the screen while the interface is scaled.
+/// </summary>
+/// <param name="view">Where the tactical view sits on the screen.</param>
+/// <returns>bool; Were the surfaces allocated?</returns>
+bool Allocate_Game_Surfaces(Rect const & view)
+{
+	Rect tactical = Tactical_Surface_Rect(view);
+	Rect composite(0, 0, tactical.Width, tactical.Y + tactical.Height);
+	Rect sidebar(0, 0, SidebarClass::SIDE_WIDTH, VisibleRect.Height);
+	Rect tactical_ui(0, 0, 0, 0);
+
+	if (Interface_Is_Scaled()) {
+		tactical_ui = Rect(0, 0, view.Width, VisibleRect.Height);
+	}
+
+	return(Allocate_Surfaces(VisibleRect, composite, composite, sidebar, tactical_ui));
 }
 
 

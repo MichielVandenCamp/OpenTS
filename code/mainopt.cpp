@@ -34,6 +34,7 @@
 #include "sounddlg.h"
 #include "stimer.h"
 #include "surface.h"
+#include "uiscale.h"
 #include "wwmouse.h"
 
 #include "color.hh"
@@ -41,8 +42,8 @@
 
 INT_PTR CALLBACK Main_Options_Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
 INT_PTR CALLBACK Display_Options_Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
-bool Change_Display_Mode(int width, int height);
-bool Test_Display_Mode_Dialog(int width, int height);
+bool Change_Display_Mode(int width, int height, int uiheight);
+bool Test_Display_Mode_Dialog(int width, int height, int uiheight);
 INT_PTR CALLBACK Test_Display_Mode_Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
 
 GameOptionsClass TempOptions;
@@ -112,16 +113,17 @@ void Main_Options_Dialog(void)
 					if (in_rc != 1) {
 						break;
 					}
-					if (TempOptions.ScreenWidth == Options.ScreenWidth && TempOptions.ScreenHeight == Options.ScreenHeight) {
+					if (TempOptions.ScreenWidth == Options.ScreenWidth && TempOptions.ScreenHeight == Options.ScreenHeight && TempOptions.UIHeight == Options.UIHeight) {
 						break;
 					}
 
 						if (WWMessageBox().Process(TXT_ABOUT_TO_TRY_MODE, TXT_OK, TXT_CANCEL) == 0) {
-							if (!Test_Display_Mode_Dialog(TempOptions.ScreenWidth, TempOptions.ScreenHeight)) {
+							if (!Test_Display_Mode_Dialog(TempOptions.ScreenWidth, TempOptions.ScreenHeight, TempOptions.UIHeight)) {
 								continue;
 							}
 							Options.ScreenWidth = TempOptions.ScreenWidth;
 							Options.ScreenHeight = TempOptions.ScreenHeight;
+							Options.UIHeight = TempOptions.UIHeight;
 						}
 
 					break;
@@ -187,21 +189,27 @@ INT_PTR CALLBACK Main_Options_Dialog_Proc(HWND window, UINT message, WPARAM wpar
 /// </summary>
 /// <param name="width">The width to render at.</param>
 /// <param name="height">The height to render at.</param>
+/// <param name="uiheight">How many pixels tall the screen the interface is laid out on is,
+/// or zero for the height rendered at.</param>
 /// <returns>bool; Was the mode changed? If not, nothing has been disturbed.</returns>
-bool Change_Display_Mode(int width, int height)
+bool Change_Display_Mode(int width, int height, int uiheight)
 {
 	DebugString("About to set video mode\n");
 
+	int framewidth = 0;
+	int frameheight = 0;
+	Interface_Frame_Size(width, height, uiheight, framewidth, frameheight);
+
 	Hide_Mouse();
 
-	if (!Video_Set_Mode(width, height)) {
+	if (!Video_Set_Mode(framewidth, frameheight, width, height)) {
 		DebugString("Video_Set_Mode failed.\n");
 		Show_Mouse();
 		return(false);
 		}
 
-	VisibleRect = Rect(0, 0, width, height);
-	DebugString("VisibleRect: %dx%d\n", width, height);
+	VisibleRect = Rect(0, 0, framewidth, frameheight);
+	DebugString("VisibleRect: %dx%d\n", framewidth, frameheight);
 
 	if (VisibleSurface != NULL) {
 		delete VisibleSurface;
@@ -283,7 +291,7 @@ bool Change_Display_Mode(int width, int height)
 	temp.Width -= SidebarClass::SIDE_WIDTH;
 	temp.Height -= 16;
 
-	Allocate_Surfaces(VisibleRect, Rect(0, 0, temp.Width, VisibleRect.Height), Rect(0, 0, temp.Width, VisibleRect.Height), Rect(0, 0, SidebarClass::SIDE_WIDTH, VisibleRect.Height));
+	Allocate_Game_Surfaces(temp);
 	LogicalSurface = HiddenSurface;
 
 	if (MouseCursor != NULL) {
@@ -318,17 +326,18 @@ bool Change_Display_Mode(int width, int height)
 /// </summary>
 /// <param name="width">The width of the display mode to try.</param>
 /// <param name="height">The height of the display mode to try.</param>
+/// <param name="uiheight">The interface height to try with it, as Change_Display_Mode takes.</param>
 /// <returns>bool; Was the new display mode accepted and left in place?</returns>
-bool Test_Display_Mode_Dialog(int width, int height)
+bool Test_Display_Mode_Dialog(int width, int height, int uiheight)
 {
 	int rc = -1;
 
-	DebugString("Testing display mode @ %dx%d\n", width, height);
+	DebugString("Testing display mode @ %dx%d, interface height %d\n", width, height, uiheight);
 	Hide_Mouse();
 	HiddenSurface->Fill(TBLACK);
 	Update_Visible_Surface();
 
-	if (!Change_Display_Mode(width, height)) {
+	if (!Change_Display_Mode(width, height, uiheight)) {
 		return(false);
 	}
 
@@ -356,8 +365,8 @@ bool Test_Display_Mode_Dialog(int width, int height)
 
 		OwnerDraw::End_Dialog(dialog);
 		if (rc != IDOK) {
-			DebugString("Resetting display mode @ %dx%d\n", Options.ScreenWidth, Options.ScreenHeight);
-			Change_Display_Mode(Options.ScreenWidth, Options.ScreenHeight);
+			DebugString("Resetting display mode @ %dx%d, interface height %d\n", Options.ScreenWidth, Options.ScreenHeight, Options.UIHeight);
+			Change_Display_Mode(Options.ScreenWidth, Options.ScreenHeight, Options.UIHeight);
 			LogicalSurface = HiddenSurface;
 			return(false);
 		}
@@ -397,11 +406,51 @@ INT_PTR CALLBACK Test_Display_Mode_Dialog_Proc(HWND window, UINT message, WPARAM
 
 
 /// <summary>
+/// Fills the interface size list and selects the size in use. A height the list does not
+/// name is offered as a custom size, so that leaving the list alone keeps it.
+/// </summary>
+static void Fill_Interface_Sizes(HWND list, int uiheight)
+{
+	static struct {
+		int Text;
+		int Height;
+	} const _sizes[] = {
+		{ TXT_UI_SIZE_RESOLUTION, 0 },
+		{ TXT_UI_SIZE_LARGE, 480 },
+		{ TXT_UI_SIZE_NORMAL, 600 },
+		{ TXT_UI_SIZE_SMALL, 1080 },
+	};
+
+	if (uiheight < 0) {
+		uiheight = 0;
+	}
+
+	int selection = -1;
+	for (int index = 0; index < (int)(sizeof(_sizes) / sizeof(_sizes[0])); index++) {
+		int item = ComboBox_AddString(list, Fetch_String(_sizes[index].Text));
+		ComboBox_SetItemData(list, item, _sizes[index].Height);
+		if (_sizes[index].Height == uiheight) {
+			selection = item;
+		}
+	}
+
+	if (selection < 0) {
+		char buffer[64];
+		snprintf(buffer, sizeof(buffer), Fetch_String(TXT_UI_SIZE_CUSTOM), uiheight);
+		selection = ComboBox_AddString(list, buffer);
+		ComboBox_SetItemData(list, selection, uiheight);
+	}
+
+	ComboBox_SetCurSel(list, selection);
+}
+
+
+/// <summary>
 /// Handles the display options dialog messages.
 /// This routine fills the resolution list with the display modes the hardware reports,
-/// remembers which one the player picked, and tracks the movie stretching preference. The
-/// chosen resolution is staged in the temporary options so that it can be tested before
-/// being made permanent.
+/// remembers which one the player picked, and tracks the interface size and the movie
+/// stretching preference. The chosen resolution and interface size are staged in the
+/// temporary options so that they can be tested before being made permanent.
 /// </summary>
 static __forceinline BOOL Display_Options_Dialog_Body(HWND window, UINT message, WPARAM wparam)
 {
@@ -445,6 +494,13 @@ static __forceinline BOOL Display_Options_Dialog_Body(HWND window, UINT message,
 					if (button) {
 						Options.StretchMovies = Button_GetCheck(button) == BST_CHECKED;
 					}
+					HWND sizes = GetDlgItem(window, IDC_DISPLAY_UISIZE);
+					if (sizes) {
+						int index = ComboBox_GetCurSel(sizes);
+						if (index != CB_ERR) {
+							TempOptions.UIHeight = (int)ComboBox_GetItemData(sizes, index);
+						}
+					}
 				}
 				break;
 
@@ -485,6 +541,11 @@ static __forceinline BOOL Display_Options_Dialog_Body(HWND window, UINT message,
 			HWND button = GetDlgItem(window, IDC_STRETCH_MOVIES);
 			if (button) {
 				Button_SetCheck(button, Options.StretchMovies != false);
+			}
+
+			HWND sizes = GetDlgItem(window, IDC_DISPLAY_UISIZE);
+			if (sizes) {
+				Fill_Interface_Sizes(sizes, TempOptions.UIHeight);
 			}
 		}
 		break;

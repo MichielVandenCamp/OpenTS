@@ -880,6 +880,11 @@
 #define TXT_SCENARIO_DATA_DAMAGED       1122
 #define TXT_CONNECTION_QUALITY_STATUS   1123
 #define TXT_CONNECTION_QUALITY_RUNG     1124
+#define TXT_UI_SIZE_RESOLUTION          1125
+#define TXT_UI_SIZE_LARGE               1126
+#define TXT_UI_SIZE_NORMAL              1127
+#define TXT_UI_SIZE_SMALL               1128
+#define TXT_UI_SIZE_CUSTOM              1129
 #define IDC_LADDER_TYPE                 1043
 #define IDC_LADDER_LOCATION             1044
 #define IDC_FINDGAME_LOCATION           1046
@@ -1167,6 +1172,7 @@
 #define IDC_DESYNC_CONTINUE             1712
 #define IDC_DESYNC_QUIT                 1713
 #define IDC_EDGE_SCROLL                 1714
+#define IDC_DISPLAY_UISIZE              1715
 
 // Next default values for new objects
 //
@@ -1174,7 +1180,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        3007
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1715
+#define _APS_NEXT_CONTROL_VALUE         1716
 #define _APS_NEXT_SYMED_VALUE           3105
 #endif
 #endif

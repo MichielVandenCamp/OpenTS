@@ -517,7 +517,7 @@ int RadarClass::RTacticalClass::Action(unsigned flags, KeyNumType & key)
 	}
 
 
-	x -= Options.IsSidebarOnRight ? TacticalRect.Width : 0;
+	x -= Options.IsSidebarOnRight ? TacticalScreenRect.Width : 0;
 
 	/*
 	**	See if the mouse is over the radar general area, but not yet
@@ -827,7 +827,7 @@ void RadarClass::Draw_Names(void)
 void RadarClass::Reposition_Sidebar(void)
 {
 	BASECLASS::Reposition_Sidebar();
-	RadarButton.Set_Position(RadX + (Options.IsSidebarOnRight ? TacticalRect.Width : 0), RadY);
+	RadarButton.Set_Position(RadX + (Options.IsSidebarOnRight ? TacticalScreenRect.Width : 0), RadY);
 	RadarButton.Flag_To_Redraw();
 	FullRedraw = true;
 }

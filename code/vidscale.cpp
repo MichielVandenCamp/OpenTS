@@ -11,6 +11,8 @@
 
 #include "vidscale.h"
 
+#include "_rect.h"
+#include "uiscale.h"
 #include "video.h"
 #include "win.h"
 
@@ -124,4 +126,70 @@ void Get_Logical_Cursor_Pos(HWND window, POINT & point)
 		point.x -= window_rect.left - origin.x;
 		point.y -= window_rect.top - origin.y;
 	}
+}
+
+
+/// <summary>
+/// Is the interface laid out on a frame of another size than the resolution?
+/// While it is, the tactical map is drawn at the resolution on a surface of its own and
+/// presented beneath the frame.
+/// </summary>
+bool Interface_Is_Scaled(void)
+{
+	VideoScaleInfo const & scale = Video_Get_Scale_Info();
+
+	return(scale.GameWidth != scale.ResolutionWidth || scale.GameHeight != scale.ResolutionHeight);
+}
+
+
+/// <summary>
+/// Works out where the tactical map draws a view on its own surface.
+/// </summary>
+/// <param name="view">Where the view sits on the screen.</param>
+/// <returns>The view itself while the map draws onto the screen's composite. While the
+/// interface is scaled, the view scaled to the resolution and moved to the corner of the
+/// map's own surface.</returns>
+Rect Tactical_Surface_Rect(Rect const & view)
+{
+	if (!Interface_Is_Scaled()) {
+		return(view);
+	}
+
+	VideoScaleInfo const & scale = Video_Get_Scale_Info();
+
+	int left = Scale_Frame_Edge(view.X, scale.GameWidth, scale.ResolutionWidth);
+	int right = Scale_Frame_Edge(view.X + view.Width, scale.GameWidth, scale.ResolutionWidth);
+	int top = Scale_Frame_Edge(view.Y, scale.GameHeight, scale.ResolutionHeight);
+	int bottom = Scale_Frame_Edge(view.Y + view.Height, scale.GameHeight, scale.ResolutionHeight);
+
+	return(Rect(0, 0, right - left, bottom - top));
+}
+
+
+/// <summary>
+/// Converts a position on the screen into one relative to the tactical view as the map
+/// draws it, which is what the map's own routines expect.
+/// </summary>
+/// <param name="point">The position on the screen.</param>
+/// <returns>The position relative to the view's corner on the map's surface. A position off
+/// the view converts to one off it too.</returns>
+Point2D Screen_To_Tactical(Point2D const & point)
+{
+	return(Point2D(
+		Scale_Frame_Pixel(point.X - TacticalScreenRect.X, TacticalScreenRect.Width, TacticalRect.Width),
+		Scale_Frame_Pixel(point.Y - TacticalScreenRect.Y, TacticalScreenRect.Height, TacticalRect.Height)));
+}
+
+
+/// <summary>
+/// Converts a position relative to the tactical view as the map draws it into one on the
+/// screen. A position taken from the screen survives the trip there and back unchanged.
+/// </summary>
+/// <param name="point">The position relative to the view's corner on the map's surface.</param>
+/// <returns>The position on the screen.</returns>
+Point2D Tactical_To_Screen(Point2D const & point)
+{
+	return(Point2D(
+		TacticalScreenRect.X + Scale_Frame_Pixel(point.X, TacticalRect.Width, TacticalScreenRect.Width),
+		TacticalScreenRect.Y + Scale_Frame_Pixel(point.Y, TacticalRect.Height, TacticalScreenRect.Height)));
 }

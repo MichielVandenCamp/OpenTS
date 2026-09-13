@@ -776,7 +776,7 @@ bool Read_Scenario(char const * fname)
 	**	properly set.
 	*/
 	Session.Messages.Init(
-		TacticalRect.X, TacticalRect.Y,	// x,y for messages
+		TacticalScreenRect.X, TacticalScreenRect.Y,	// x,y for messages
 		6, 										// max # msgs
 		MAX_MESSAGE_LENGTH - 14,			// max msg length
 		7 * 2,									// font height in pixels
@@ -784,7 +784,7 @@ bool Read_Scenario(char const * fname)
 		0,//BG		1,							// enable edit overflow
 		20,										// min,
 		MAX_MESSAGE_LENGTH - 14,			// max for trimming overflow
-		TacticalRect.Width);					// Width in pixels of buffer
+		TacticalScreenRect.Width);				// Width in pixels of buffer
 
 	Fill_In_Data();
 

@@ -398,7 +398,7 @@ ActionType ScrollClass::What_Action(Cell const & cell, ObjectClass * object, boo
 /// scroll arrow, or its barred version when the map cannot travel that way. Scrolling gathers
 /// speed the longer the cursor is held at the edge and coasts back down once it leaves.
 /// </summary>
-/// <param name="point">The current mouse position, relative to the tactical view.</param>
+/// <param name="point">The current mouse position on the screen.</param>
 void ScrollClass::Scroll_Edge(Point2D const & point)
 {
 	/*
@@ -411,11 +411,10 @@ void ScrollClass::Scroll_Edge(Point2D const & point)
 		bool noscroll = false;
 
 		if (!noscroll) {
-			Point2D p = TacticalRect.Top_Left() + point;
-			int x = p.X;
-			int y = p.Y;
-			int w = (CompositeSurface->Get_Width()+SidebarSurface->Get_Width()) - 1;
-			int h = CompositeSurface->Get_Height() - 1;
+			int x = point.X;
+			int y = point.Y;
+			int w = (Tactical_UI_Surface()->Get_Width()+SidebarSurface->Get_Width()) - 1;
+			int h = Tactical_UI_Surface()->Get_Height() - 1;
 
 			bool at_screen_edge = (y <= 0 || x == 0 || x >= w || y >= h);
 
@@ -548,9 +547,8 @@ void ScrollClass::Scroll_AI(void)
 	_LastScrollPollTime = now;
 
 	if (!IgnoreInput) {
-		Point2D tacti = TacticalRect.Top_Left();
 		Point2D mouse = MouseCursor->Get_Mouse_Point();
-		Point2D point = mouse - tacti;
+		Point2D point = Screen_To_Tactical(mouse);
 
 		if (IsMouseDown == true) {
 			if (Keyboard->Down(KN_LMOUSE)) {
@@ -572,7 +570,7 @@ void ScrollClass::Scroll_AI(void)
 				HoverObject = NULL;
 			}
 			if (Options.AutoScroll && !Debug_Map) {
-				Scroll_Edge(point);
+				Scroll_Edge(mouse);
 			}
 		}
 	}
@@ -647,8 +645,7 @@ void ScrollClass::Message_Handler(HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			if (IsMouseDown == false) {
 
 				POINTS pts = MAKEPOINTS(lParam);
-				point.X = pts.x - TacticalRect.X;
-				point.Y = pts.y - TacticalRect.Y;
+				point = Screen_To_Tactical(Point2D(pts.x, pts.y));
 
 				if (Resolve_Point(point, cell, coord, object, fog, shadow)) {
 					Map.Mouse_Left_Up(cell, shadow, object, What_Action(cell, object, true));
@@ -663,8 +660,7 @@ void ScrollClass::Message_Handler(HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			if (IsMouseDown == true) {
 
 				POINTS pts = MAKEPOINTS(lParam);
-				point.X = pts.x - TacticalRect.X;
-				point.Y = pts.y - TacticalRect.Y;
+				point = Screen_To_Tactical(Point2D(pts.x, pts.y));
 
 				Resolve_Point(point, cell, coord, object, fog, shadow);
 				Map.Mouse_Left_Release(coord, cell, object, What_Action(cell, object, false));
@@ -677,8 +673,7 @@ void ScrollClass::Message_Handler(HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			if (IsMouseDown == false) {
 
 				POINTS pts = MAKEPOINTS(lParam);
-				point.X = pts.x - TacticalRect.X;
-				point.Y = pts.y - TacticalRect.Y;
+				point = Screen_To_Tactical(Point2D(pts.x, pts.y));
 
 				if (Resolve_Point(point, cell, coord, object, fog, shadow)) {
 					Map.Mouse_Right_Press(point);
@@ -791,9 +786,10 @@ void ScrollClass::Scroll_Coast(Point2D const & point)
 					distx = abs(int((double)posx * (12.0 / (double)(Options.ScrollRate + 1))));
 					disty = abs(int((double)posy * (12.0 / (double)(Options.ScrollRate + 1))));
 					if (distx + disty > 0) {
+						Point2D press = Tactical_To_Screen(RightPressPoint);
 						POINT pt;
-						pt.x = RightPressPoint.X + TacticalRect.X;
-						pt.y = RightPressPoint.Y + TacticalRect.Y;
+						pt.x = press.X;
+						pt.y = press.Y;
 						Game_Point_To_Screen(pt);
 						SetCursorPos(pt.x, pt.y);
 					}
@@ -805,9 +801,10 @@ void ScrollClass::Scroll_Coast(Point2D const & point)
 					distx = abs(int((double)posx * (12.0 / (double)(Options.ScrollRate + 1))));
 					disty = abs(int((double)posy * (12.0 / (double)(Options.ScrollRate + 1))));
 					if (distx + disty > 0) {
+						Point2D press = Tactical_To_Screen(RightPressPoint);
 						POINT pt;
-						pt.x = RightPressPoint.X + TacticalRect.X;
-						pt.y = RightPressPoint.Y + TacticalRect.Y;
+						pt.x = press.X;
+						pt.y = press.Y;
 						Game_Point_To_Screen(pt);
 						SetCursorPos(pt.x, pt.y);
 					}

@@ -138,6 +138,7 @@
 #include "tube.h"
 #include "tunnel.h"
 #include "tutorial.h"
+#include "uiscale.h"
 #include "unit.h"
 #include "unittype.h"
 #include "vanim.h"
@@ -207,6 +208,10 @@ void Reset_Surfaces(void)
 		if (CompositeSurface) {
 			delete CompositeSurface;
 			CompositeSurface = NULL;
+		}
+		if (TacticalUISurface) {
+			delete TacticalUISurface;
+			TacticalUISurface = NULL;
 		}
 		if (VisibleSurface) {
 			delete VisibleSurface;
@@ -508,6 +513,7 @@ int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_sho
 		ConfigINI.Load(*cfile, false);
 		Options.ScreenWidth = ConfigINI.Get_Int("Video", "ScreenWidth", Options.ScreenWidth);
 		Options.ScreenHeight = ConfigINI.Get_Int("Video", "ScreenHeight", Options.ScreenHeight);
+		Options.UIHeight = ConfigINI.Get_Int("Video", "UIHeight", Options.UIHeight);
 
 		/*
 		 * These are wanted before the window and the renderer exist, which is well
@@ -544,9 +550,15 @@ int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_sho
 			Options.ScreenHeight = 480;
 		}
 
-		VisibleRect = Rect(0, 0, Options.ScreenWidth, Options.ScreenHeight);
-		VideoModeWidth = Options.ScreenWidth;
-		VideoModeHeight = Options.ScreenHeight;
+		int framewidth = 0;
+		int frameheight = 0;
+		Interface_Frame_Size(Options.ScreenWidth, Options.ScreenHeight, Options.UIHeight, framewidth, frameheight);
+
+		VisibleRect = Rect(0, 0, framewidth, frameheight);
+		VideoModeWidth = framewidth;
+		VideoModeHeight = frameheight;
+		VideoResolutionWidth = Options.ScreenWidth;
+		VideoResolutionHeight = Options.ScreenHeight;
 
 		Create_Main_Window(instance, command_show, Options.ScreenWidth, Options.ScreenHeight);
 
@@ -577,11 +589,7 @@ int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_sho
 
 		VisibleSurface->Fill(0);
 
-		Rect sidebar_rect(0,0,SidebarClass::SIDE_WIDTH,VisibleRect.Height);
-		Rect tile_rect(0,0,VisibleRect.Width-sidebar_rect.Width, sidebar_rect.Height);
-		Rect composite_rect(0,0,VisibleRect.Width-sidebar_rect.Width, sidebar_rect.Height);
-
-		Allocate_Surfaces(VisibleRect, composite_rect, tile_rect, sidebar_rect, false);
+		Allocate_Game_Surfaces(Rect(0, 16, VisibleRect.Width - SidebarClass::SIDE_WIDTH, VisibleRect.Height - 16));
 		LogicalSurface = HiddenSurface;
 		Update_Visible_Surface(HiddenSurface);
 

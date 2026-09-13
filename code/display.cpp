@@ -144,6 +144,7 @@
 #include "unittype.h"
 #include "vein.h"
 #include "vector3.h"
+#include "vidscale.h"
 #include "vox.h"
 #include "waypoint.h"
 #include "xpipe.h"
@@ -362,7 +363,8 @@ void DisplayClass::Set_View_Dimensions(Rect const & dimensions)
 {
 	DebugString("Set_View_Dimensions(%d,%d,%d,%d)\n", dimensions.X, dimensions.Y, dimensions.Width, dimensions.Height);
 
-	TacticalRect = dimensions;
+	TacticalScreenRect = dimensions;
+	TacticalRect = Tactical_Surface_Rect(dimensions);
 
 	if (TacticalMap != NULL) {
 		TacticalMap->Set_View_Dimensions(TacticalRect);
@@ -393,16 +395,16 @@ void DisplayClass::Set_View_Dimensions(Rect const & dimensions)
 
 	Map.Reposition_Sidebar();
 
-	TacButton.X = TacticalRect.X;
-	TacButton.Y = TacticalRect.Y;
-	TacButton.Width = TacticalRect.Width;
-	TacButton.Height = TacticalRect.Height;
+	TacButton.X = TacticalScreenRect.X;
+	TacButton.Y = TacticalScreenRect.Y;
+	TacButton.Width = TacticalScreenRect.Width;
+	TacButton.Height = TacticalScreenRect.Height;
 
 	if (ToolTips != NULL) {
 		ToolTip tooltip;
 		tooltip.ID = 500;
 		tooltip.Text = TXT_NONE;
-		tooltip.Region = TacticalRect;
+		tooltip.Region = TacticalScreenRect;
 		ToolTips->Remove(500);
 		ToolTips->Add(&tooltip);
 	}
@@ -413,7 +415,7 @@ void DisplayClass::Set_View_Dimensions(Rect const & dimensions)
 	**	properly set.
 	*/
 	Session.Messages.Init(
-		TacticalRect.X, TacticalRect.Y,     // x,y for messages
+		TacticalScreenRect.X, TacticalScreenRect.Y, // x,y for messages
 		6,                                  // max # msgs
 		MAX_MESSAGE_LENGTH-14,              // max msg length
 		7 * 2/*RESFACTOR*/,                 // font height in pixels
@@ -421,9 +423,9 @@ void DisplayClass::Set_View_Dimensions(Rect const & dimensions)
 		0,                                  /// enable edit overflow
 		20,                                 // min,
 		MAX_MESSAGE_LENGTH - 14,            // max for trimming overflow
-		TacticalRect.Width);                // Width in pixels of buffer
+		TacticalScreenRect.Width);          // Width in pixels of buffer
 
-	Session.Messages.Set_Width(TacticalRect.Width);
+	Session.Messages.Set_Width(TacticalScreenRect.Width);
 
 	DebugString("Set_View_Dimensions(exit)\n");
 }
@@ -696,16 +698,15 @@ Cell DisplayClass::Set_Cursor_Pos(Cell const & xpos)
 	*/
 	if (pos == CELL_NONE) {
 		Point2D tl = TacticalRect.TopLeft;
-		if (TacticalRect.Is_Point_Within(MouseCursor->Get_Mouse_Point())) {
+		if (TacticalScreenRect.Is_Point_Within(MouseCursor->Get_Mouse_Point())) {
 			Point2D mouse = MouseCursor->Get_Mouse_Point();
-			Cell click = Map.Click_Cell_Calc(mouse);
+			Cell click = Map.Click_Cell_Calc(tl + Screen_To_Tactical(mouse));
 			if (click != CELL_NONE) {
 				pos = click;
 			}
 		} else {
 			Point2D mouse = MouseCursor->Get_Mouse_Point();
-			mouse -= tl;
-			pos = TacticalMap->Pixel_To_Cell(mouse);
+			pos = TacticalMap->Pixel_To_Cell(Screen_To_Tactical(mouse));
 		}
 
 	}
@@ -1796,7 +1797,7 @@ int DisplayClass::TacticalClass::Action(unsigned flags, KeyNumType & key)
 	TacticalMap->Pixel_To_Coord(pixel);
 	Cell cell;
 
-	pixel -= TacticalRect.Top_Left();
+	pixel = Screen_To_Tactical(pixel);
 
 	Map.Resolve_Point(pixel, cell, coord, object, fog, shadow);
 
@@ -3761,7 +3762,7 @@ char const * DisplayClass::Help_Text(int id)
 	ObjectClass * object;
 	bool fog, shadow;
 
-	Map.Resolve_Point(Get_Mouse_Point() - TacticalRect.TopLeft, cell, coord, object, fog, shadow);
+	Map.Resolve_Point(Screen_To_Tactical(Get_Mouse_Point()), cell, coord, object, fog, shadow);
 
 	/*
 	**	Give a generic help message when over shadow terrain.

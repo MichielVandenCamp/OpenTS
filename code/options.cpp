@@ -129,6 +129,7 @@ OptionsClass::OptionsClass(void) :
 	AutoSaveInterval(10800),
 	ScreenWidth(-1),
 	ScreenHeight(-1),
+	UIHeight(0),
 	ScrollMethod(0),
 	DetailLevel(2),
 	StretchMovies(0),
@@ -410,6 +411,9 @@ void OptionsClass::Load_Settings(void)
 	ScreenHeight = ConfigINI.Get_Int("Video", "ScreenHeight", ScreenHeight);
 	DebugString("Resolution = %d X %d\n", ScreenWidth, ScreenHeight);
 
+	UIHeight = ConfigINI.Get_Int("Video", "UIHeight", UIHeight);
+	DebugString("UIHeight = %d\n", UIHeight);
+
 	StretchMovies = ConfigINI.Get_Bool("Video", "StretchMovies", StretchMovies);
 	DebugString("StretchMovies is %s\n", StretchMovies == true ? "ON" : "OFF");
 
@@ -479,6 +483,7 @@ void OptionsClass::Save_Settings (void)
 	ConfigINI.Put_Int("Options", "AutoSaveInterval", AutoSaveInterval);
 	ConfigINI.Put_Int("Video", "ScreenWidth", ScreenWidth);
 	ConfigINI.Put_Int("Video", "ScreenHeight", ScreenHeight);
+	ConfigINI.Put_Int("Video", "UIHeight", UIHeight);
 	ConfigINI.Put_Bool("Video", "StretchMovies", StretchMovies);
 	ConfigINI.Put_Bool("Video", "Fullscreen", Fullscreen);
 	ConfigINI.Put_Int("Video", "WindowWidth", WindowWidth);

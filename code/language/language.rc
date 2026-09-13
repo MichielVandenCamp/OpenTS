@@ -186,12 +186,16 @@ FONT 8, "MS Sans Serif"
 BEGIN
     CONTROL         "OK",IDOK,"Button",BS_OWNERDRAW,22,170,62,14
     CONTROL         "Cancel",IDCANCEL,"Button",BS_OWNERDRAW,145,170,62,14
-    LISTBOX         IDC_DISPLAY_RESLIST,22,37,185,110,LBS_OWNERDRAWFIXED | 
+    LISTBOX         IDC_DISPLAY_RESLIST,22,37,185,88,LBS_OWNERDRAWFIXED |
                     LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT | NOT WS_BORDER
     CTEXT           "Resolution Modes",IDC_DISPLAY_RESLABEL,22,25,185,10,
                     SS_CENTERIMAGE | NOT WS_GROUP
-    CTEXT           "Display Options:",-1,22,12,185,9,SS_CENTERIMAGE | NOT 
+    CTEXT           "Display Options:",-1,22,12,185,9,SS_CENTERIMAGE | NOT
                     WS_GROUP
+    LTEXT           "Interface Size:",-1,22,132,66,12,SS_CENTERIMAGE | NOT
+                    WS_GROUP
+    COMBOBOX        IDC_DISPLAY_UISIZE,90,131,117,80,CBS_DROPDOWNLIST |
+                    CBS_OWNERDRAWFIXED | CBS_HASSTRINGS
     CONTROL         "Stretch movies to fit resolution",IDC_STRETCH_MOVIES,
                     "Button",BS_AUTOCHECKBOX | BS_FLAT,22,153,185,10
 END
@@ -2571,6 +2575,11 @@ BEGIN
     TXT_SCENARIO_DATA_DAMAGED "Unable to read scenario %s: its map data is damaged."
     TXT_CONNECTION_QUALITY_STATUS "Connection quality target: %s."
     TXT_CONNECTION_QUALITY_RUNG "%s (rung %u)"
+    TXT_UI_SIZE_RESOLUTION  "Match resolution"
+    TXT_UI_SIZE_LARGE       "Large (as 640 x 480)"
+    TXT_UI_SIZE_NORMAL      "Normal (as 800 x 600)"
+    TXT_UI_SIZE_SMALL       "Small (as 1920 x 1080)"
+    TXT_UI_SIZE_CUSTOM      "Custom (%d pixels tall)"
 END
 
 #endif    // English (U.S.) resources

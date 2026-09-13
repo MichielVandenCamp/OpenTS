@@ -7,7 +7,14 @@
  * See LICENSE.md for applicable additional terms and warranty disclaimers.
  ******************************************************************************/
 
+// Layout arithmetic for an interface scaled apart from the tactical map. The map is drawn
+// at one pixel per pixel of the resolution, while the interface is laid out on a smaller
+// or larger frame that the presenter stretches over the same area.
+
 #pragma once
 
-bool Change_Display_Mode(int width, int height, int uiheight);
-void Main_Options_Dialog(void);
+
+void Interface_Frame_Size(int width, int height, int uiheight, int & framewidth, int & frameheight);
+
+int Scale_Frame_Edge(int edge, int from, int to);
+int Scale_Frame_Pixel(int pixel, int from, int to);

@@ -145,3 +145,5 @@ class GScreenClass
 
 void Update_Visible_Surface(Surface *surface = HiddenSurface, Rect *rect = NULL);
 void Heal_Dialog_Controls(void);
+Surface * Tactical_UI_Surface(void);
+void Fill_Tactical_Holes(Surface & surface);

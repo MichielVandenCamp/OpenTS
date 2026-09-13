@@ -415,10 +415,10 @@ void SidebarClass::Init_IO(void)
 {
 	BASECLASS::Init_IO();
 
-	SidebarRect.X = TacticalRect.X + TacticalRect.Width;
+	SidebarRect.X = TacticalScreenRect.X + TacticalScreenRect.Width;
 	SidebarRect.Y = SIDE_Y;
 	SidebarRect.Width = 641 - SidebarRect.X;
-	SidebarRect.Height = (TacticalRect.Y - SidebarRect.Y) + TacticalRect.Height;
+	SidebarRect.Height = (TacticalScreenRect.Y - SidebarRect.Y) + TacticalScreenRect.Height;
 
 	/*
 	**	Add the sidebar's buttons only if we're not in editor mode.
@@ -1022,7 +1022,7 @@ void SidebarClass::Blit_Sidebar(bool complete)
 			if (Map.LastDrawRect == RECT_NONE) {
 				if (IsToRedrawCredits) {
 					VisibleSurface->Blit_From(
-						Rect((Options.IsSidebarOnRight ? TacticalRect.Width : 0), 0, SIDE_WIDTH, CREDITS_HEIGHT),
+						Rect((Options.IsSidebarOnRight ? TacticalScreenRect.Width : 0), 0, SIDE_WIDTH, CREDITS_HEIGHT),
 						*SidebarSurface,
 						Rect(0, 0, SIDE_WIDTH, CREDITS_HEIGHT),
 						false,
@@ -1038,13 +1038,13 @@ void SidebarClass::Blit_Sidebar(bool complete)
 		}
 
 		if (Map.LastDrawRect == RECT_NONE && !complete) {
-			VisibleSurface->Blit_From(Rect((Options.IsSidebarOnRight ? TacticalRect.Width : 0), 0, SIDE_WIDTH, CREDITS_HEIGHT), *SidebarSurface, Rect(0, 0, SIDE_WIDTH, CREDITS_HEIGHT));
-			VisibleSurface->Blit_From(Rect((Options.IsSidebarOnRight ? TacticalRect.Width : 0), SIDE_BODY_Y, SIDE_WIDTH, SidebarSurface->Get_Height() - SIDE_BODY_Y), *SidebarSurface, Rect(0, SIDE_BODY_Y, SIDE_WIDTH, SidebarSurface->Get_Height() - SIDE_BODY_Y));
+			VisibleSurface->Blit_From(Rect((Options.IsSidebarOnRight ? TacticalScreenRect.Width : 0), 0, SIDE_WIDTH, CREDITS_HEIGHT), *SidebarSurface, Rect(0, 0, SIDE_WIDTH, CREDITS_HEIGHT));
+			VisibleSurface->Blit_From(Rect((Options.IsSidebarOnRight ? TacticalScreenRect.Width : 0), SIDE_BODY_Y, SIDE_WIDTH, SidebarSurface->Get_Height() - SIDE_BODY_Y), *SidebarSurface, Rect(0, SIDE_BODY_Y, SIDE_WIDTH, SidebarSurface->Get_Height() - SIDE_BODY_Y));
 		} else if (!IsToBlitSidebar) {
-			VisibleSurface->Blit_From(Rect(Map.LastDrawRect.X + (Options.IsSidebarOnRight ? TacticalRect.Width : 0), Map.LastDrawRect.Y, Map.LastDrawRect.Width, Map.LastDrawRect.Height), *SidebarSurface, Map.LastDrawRect);
+			VisibleSurface->Blit_From(Rect(Map.LastDrawRect.X + (Options.IsSidebarOnRight ? TacticalScreenRect.Width : 0), Map.LastDrawRect.Y, Map.LastDrawRect.Width, Map.LastDrawRect.Height), *SidebarSurface, Map.LastDrawRect);
 		} else {
 			Rect sb_rect = SidebarSurface->Get_Rect();
-			VisibleSurface->Blit_From(Rect((Options.IsSidebarOnRight ? TacticalRect.Width : 0), 0, sb_rect.Width, sb_rect.Height), *SidebarSurface, Rect(0, 0, sb_rect.Width, sb_rect.Height));
+			VisibleSurface->Blit_From(Rect((Options.IsSidebarOnRight ? TacticalScreenRect.Width : 0), 0, sb_rect.Width, sb_rect.Height), *SidebarSurface, Rect(0, 0, sb_rect.Width, sb_rect.Height));
 		}
 	}
 	IsToBlitSidebar = false;
@@ -2709,10 +2709,10 @@ void SidebarClass::Reposition_Sidebar(void)
 	/*
 	 * Position the sidebar.
 	 */
-	SidebarRect.X = Options.IsSidebarOnRight ? TacticalRect.X + TacticalRect.Width : 0;
+	SidebarRect.X = Options.IsSidebarOnRight ? TacticalScreenRect.X + TacticalScreenRect.Width : 0;
 	SidebarRect.Y = SIDE_Y;
 	SidebarRect.Width = SIDE_WIDTH;
-	SidebarRect.Height = TacticalRect.Height + TacticalRect.Y - SIDE_Y;
+	SidebarRect.Height = TacticalScreenRect.Height + TacticalScreenRect.Y - SIDE_Y;
 
 	BASECLASS::Reposition_Sidebar();
 
@@ -2725,7 +2725,7 @@ void SidebarClass::Reposition_Sidebar(void)
 	/*
 	 * Position the sidebar's buttons.
 	 */
-	Background.Set_Position(SidebarRect.X + 16, TacticalRect.Y);
+	Background.Set_Position(SidebarRect.X + 16, TacticalScreenRect.Y);
 	Background.Flag_To_Redraw();
 
 	Repair.Set_Position(SidebarRect.X + BUTTON_ONE_X, SidebarRect.Y + BUTTON_ONE_Y);
@@ -2808,7 +2808,7 @@ void SidebarClass::Reposition_Sidebar(void)
 	int x = 0;
 	int y = RadarButton.Y + RadarButton.Height;
 	if (Options.IsSidebarOnRight) {
-		Background.Set_Position(TacticalRect.X + TacticalRect.Width, y);
+		Background.Set_Position(TacticalScreenRect.X + TacticalScreenRect.Width, y);
 	} else {
 		Background.Set_Position(x, y);
 	}

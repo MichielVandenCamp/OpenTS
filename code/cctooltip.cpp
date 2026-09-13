@@ -18,6 +18,7 @@
 #include "dialog.h"
 #include "dsurface.h"
 #include "goptions.h"
+#include "gscreen.h"
 #include "scheme.h"
 #include "wwfont.h"
 
@@ -47,8 +48,8 @@ bool CCToolTip::Update(ToolTipText * text)
 
 		Rect * trect;
 		if (Options.IsSidebarOnRight == true) {
-			if (text->Pos.x <= TacticalRect.X + TacticalRect.Width) {
-				trect = &TacticalRect;
+			if (text->Pos.x <= TacticalScreenRect.X + TacticalScreenRect.Width) {
+				trect = &TacticalScreenRect;
 			} else {
 				trect = &SidebarRect;
 				Map.SidebarClass::IsToRedraw = true;
@@ -58,7 +59,7 @@ bool CCToolTip::Update(ToolTipText * text)
 				trect = &SidebarRect;
 				Map.SidebarClass::IsToRedraw = true;
 			} else {
-				trect = &TacticalRect;
+				trect = &TacticalScreenRect;
 			}
 		}
 
@@ -103,7 +104,7 @@ void CCToolTip::Reset(const ToolTipText * text)
 {
 	bool redraw = false;
 	if (Options.IsSidebarOnRight == true) {
-		if (text->Pos.x >= TacticalRect.X + TacticalRect.Width) {
+		if (text->Pos.x >= TacticalScreenRect.X + TacticalScreenRect.Width) {
 			redraw = true;
 		}
 	} else {
@@ -150,9 +151,9 @@ void CCToolTip::Draw(const ToolTipText * text)
 	Surface * surface = NULL;
 
 	if (Options.IsSidebarOnRight == true) {
-		int offset = TacticalRect.X + TacticalRect.Width;
+		int offset = TacticalScreenRect.X + TacticalScreenRect.Width;
 		if (point.X + text->TextWidth <= offset) {
-			surface = CompositeSurface;
+			surface = Tactical_UI_Surface();
 		} else if (UseSidebarSurface == true && point.X >= offset) {
 			surface = SidebarSurface;
 			point.X -= offset;
@@ -161,7 +162,7 @@ void CCToolTip::Draw(const ToolTipText * text)
 	} else {
 		int offset = SidebarRect.X + SidebarRect.Width;
 		if (point.X >= offset) {
-			surface = CompositeSurface;
+			surface = Tactical_UI_Surface();
 			point.X -= offset;
 		} else if (UseSidebarSurface == true && point.X + text->TextWidth <= offset) {
 			surface = SidebarSurface;
