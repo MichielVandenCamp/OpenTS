@@ -53,6 +53,18 @@ static bool Round_Trip_Is_Stable(int from, int to)
 }
 
 
+static bool Zoom_Steps_Widen_The_View(void)
+{
+	for (int step = 1; step <= WORLD_ZOOM_STEPS; step++) {
+		if (World_Zoom_Height(step) <= World_Zoom_Height(step - 1)) {
+			std::printf("  step %d gave %d after %d\n", step, World_Zoom_Height(step), World_Zoom_Height(step - 1));
+			return(false);
+		}
+	}
+	return(true);
+}
+
+
 int main(void)
 {
 	Check(Frame_Is(1920, 1080, 0, 1920, 1080), "no interface height keeps the resolution");
@@ -83,6 +95,13 @@ int main(void)
 	Check(Round_Trip_Is_Stable(1000, 1001), "a position survives a trip at nearly one to one");
 	Check(Round_Trip_Is_Stable(3, 7), "a position survives a trip between small spans");
 	Check(Round_Trip_Is_Stable(7, 3), "a position survives a trip between small spans reversed");
+
+	Check(World_Zoom_Height(0) == 600, "the nearest zoom shows 600 lines of the map");
+	Check(World_Zoom_Height(WORLD_ZOOM_STEPS) == 1080, "the farthest zoom shows 1080 lines of the map");
+	Check(World_Zoom_Height(WORLD_ZOOM_STEPS / 2) == 805, "the middle step is the geometric mean of the ends");
+	Check(World_Zoom_Height(-3) == 600, "a step before the nearest is the nearest");
+	Check(World_Zoom_Height(WORLD_ZOOM_STEPS + 5) == 1080, "a step past the farthest is the farthest");
+	Check(Zoom_Steps_Widen_The_View(), "every step shows more of the map than the one before");
 
 	return(_Failures == 0 ? 0 : 1);
 }

@@ -33,6 +33,7 @@ int Main_Menu(unsigned int timeout);
 
 bool Allocate_Surfaces(const Rect & hidden_rect, const Rect & composite_rect, const Rect & tile_rect, const Rect & sidebar_rect, const Rect & tactical_ui_rect, bool hidden_first = false);
 bool Allocate_Game_Surfaces(Rect const & view);
+void Allocate_Tactical_Surfaces(Rect const & view);
 
 bool Init_Hotkeys(void);
 void Execute_Command(char const * name);

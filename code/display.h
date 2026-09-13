@@ -154,6 +154,7 @@ class DisplayClass: public MapClass
 		virtual MouseType Get_Mouse_Shape(void) const = 0;
 		virtual bool Scroll_Map(FacingType facing, int & distance, bool really);
 		virtual void Set_View_Dimensions(Rect const & dimensions);
+		void Rescale_Tactical_View(void);
 
 		/*
 		**	Pending object placement control.

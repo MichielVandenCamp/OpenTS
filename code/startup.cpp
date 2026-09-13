@@ -145,6 +145,7 @@
 #include "vanimtype.h"
 #include "vector.h"
 #include "video.h"
+#include "viewzoom.h"
 #include "walk.h"
 #include "warhead.h"
 #include "wave.h"
@@ -559,6 +560,7 @@ int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_sho
 		VideoModeHeight = frameheight;
 		VideoResolutionWidth = Options.ScreenWidth;
 		VideoResolutionHeight = Options.ScreenHeight;
+		VideoWorldHeight = View_Zoom_World_Height();
 
 		Create_Main_Window(instance, command_show, Options.ScreenWidth, Options.ScreenHeight);
 

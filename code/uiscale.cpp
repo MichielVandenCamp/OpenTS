@@ -12,6 +12,7 @@
 #include "uiscale.h"
 
 #include <algorithm>
+#include <cmath>
 
 
 // The display options offer resolutions within these bounds, and the interface is never
@@ -94,4 +95,19 @@ int Scale_Frame_Pixel(int pixel, int from, int to)
 		return(pixel);
 	}
 	return((int)Floor_Divide((2LL * pixel + 1) * to, 2LL * from));
+}
+
+
+/// <summary>
+/// Works out how many pixels of the tactical map the screen is tall at a zoom step.
+/// </summary>
+/// <param name="step">The zoom step, from zero for the nearest to WORLD_ZOOM_STEPS for the
+/// farthest. A step outside that range is moved to the nearer end of it.</param>
+/// <returns>int; The screen's height in pixels of the map.</returns>
+int World_Zoom_Height(int step)
+{
+	step = std::clamp(step, 0, WORLD_ZOOM_STEPS);
+
+	double ratio = (double)WORLD_ZOOM_FARTHEST_HEIGHT / (double)WORLD_ZOOM_NEAREST_HEIGHT;
+	return((int)std::lround(WORLD_ZOOM_NEAREST_HEIGHT * std::pow(ratio, (double)step / (double)WORLD_ZOOM_STEPS)));
 }

@@ -130,15 +130,14 @@ void Get_Logical_Cursor_Pos(HWND window, POINT & point)
 
 
 /// <summary>
-/// Is the interface laid out on a frame of another size than the resolution?
-/// While it is, the tactical map is drawn at the resolution on a surface of its own and
-/// presented beneath the frame.
+/// Is the tactical map drawn at another scale than the interface?
+/// While it is, the map is drawn on a surface of its own and presented beneath the frame.
 /// </summary>
-bool Interface_Is_Scaled(void)
+bool Tactical_Is_Scaled(void)
 {
 	VideoScaleInfo const & scale = Video_Get_Scale_Info();
 
-	return(scale.GameWidth != scale.ResolutionWidth || scale.GameHeight != scale.ResolutionHeight);
+	return(scale.GameWidth != scale.WorldWidth || scale.GameHeight != scale.WorldHeight);
 }
 
 
@@ -146,21 +145,21 @@ bool Interface_Is_Scaled(void)
 /// Works out where the tactical map draws a view on its own surface.
 /// </summary>
 /// <param name="view">Where the view sits on the screen.</param>
-/// <returns>The view itself while the map draws onto the screen's composite. While the
-/// interface is scaled, the view scaled to the resolution and moved to the corner of the
-/// map's own surface.</returns>
+/// <returns>The view itself while the map draws onto the screen's composite. While the map
+/// is drawn at another scale, the view scaled to the map's frame and moved to the corner of
+/// the map's own surface.</returns>
 Rect Tactical_Surface_Rect(Rect const & view)
 {
-	if (!Interface_Is_Scaled()) {
+	if (!Tactical_Is_Scaled()) {
 		return(view);
 	}
 
 	VideoScaleInfo const & scale = Video_Get_Scale_Info();
 
-	int left = Scale_Frame_Edge(view.X, scale.GameWidth, scale.ResolutionWidth);
-	int right = Scale_Frame_Edge(view.X + view.Width, scale.GameWidth, scale.ResolutionWidth);
-	int top = Scale_Frame_Edge(view.Y, scale.GameHeight, scale.ResolutionHeight);
-	int bottom = Scale_Frame_Edge(view.Y + view.Height, scale.GameHeight, scale.ResolutionHeight);
+	int left = Scale_Frame_Edge(view.X, scale.GameWidth, scale.WorldWidth);
+	int right = Scale_Frame_Edge(view.X + view.Width, scale.GameWidth, scale.WorldWidth);
+	int top = Scale_Frame_Edge(view.Y, scale.GameHeight, scale.WorldHeight);
+	int bottom = Scale_Frame_Edge(view.Y + view.Height, scale.GameHeight, scale.WorldHeight);
 
 	return(Rect(0, 0, right - left, bottom - top));
 }

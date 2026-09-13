@@ -9,8 +9,9 @@
 
 // The engine's side of the presenter. The game draws its frame into the visible surface
 // as it always has; this decides when that frame reaches the screen and where in the
-// window it lands, and hands it to the renderer behind video.h. While the interface is
-// scaled, a picture of the tactical map is handed over as well and drawn beneath it.
+// window it lands, and hands it to the renderer behind video.h. While the tactical map is
+// drawn at another scale than the interface, a picture of the map is handed over as well
+// and drawn beneath it.
 
 #include "always.h"
 
@@ -40,12 +41,19 @@ int VideoModeWidth = 0;
 int VideoModeHeight = 0;
 
 /*
- * The resolution the tactical map is drawn at, which the picture is fitted to the window by.
- * The frame has the same size unless the interface is scaled, in which case the frame is
- * stretched over the area the resolution fills.
+ * The resolution, whose shape the picture is fitted to the window by. The frame has the same
+ * size unless the interface is scaled, in which case the frame is stretched over the area the
+ * resolution fills.
  */
 int VideoResolutionWidth = 0;
 int VideoResolutionHeight = 0;
+
+/*
+ * How many pixels of the tactical map the screen is tall. The map is drawn on a frame of this
+ * height with the resolution's shape, which is stretched over the same area as the frame the
+ * interface is drawn in. Zero draws the map at the resolution.
+ */
+int VideoWorldHeight = 0;
 
 /*
  * Is the game running in a framed, resizable window rather than in a borderless one
@@ -67,9 +75,9 @@ static unsigned int _PresentInterval = 16;
 // that the engine's own present provoked.
 static bool _Presenting = false;
 
-// The last picture of the tactical map handed over while the interface is scaled. It is
-// copied so that a present at any later moment shows a finished picture, and it reaches the
-// renderer only when a present happens.
+// The last picture of the tactical map handed over while the map is drawn at another scale
+// than the interface. It is copied so that a present at any later moment shows a finished
+// picture, and it reaches the renderer only when a present happens.
 static unsigned short * _WorldPixels = NULL;
 static int _WorldWidth = 0;
 static int _WorldHeight = 0;
@@ -101,6 +109,24 @@ static void Update_Present_Interval(int refreshrate)
 
 
 /// <summary>
+/// Works out the frame the tactical map is drawn in.
+/// </summary>
+/// <param name="height">How many pixels of the map the screen is tall, or zero or less for
+/// the resolution itself.</param>
+static void World_Frame_Size(int resolutionwidth, int resolutionheight, int height, int & framewidth, int & frameheight)
+{
+	if (height <= 0 || resolutionheight <= 0) {
+		framewidth = resolutionwidth;
+		frameheight = resolutionheight;
+		return;
+	}
+
+	framewidth = Scale_Frame_Edge(resolutionwidth, resolutionheight, height);
+	frameheight = height;
+}
+
+
+/// <summary>
 /// Works out where the game's frame sits inside the window.
 /// The picture keeps the resolution's shape, so it is grown by whichever of the two axes
 /// runs out first and centered in what is left over. The frame is stretched over it.
@@ -111,6 +137,7 @@ static void Update_Scale_Info(void)
 	_ScaleInfo.GameHeight = VideoModeHeight;
 	_ScaleInfo.ResolutionWidth = VideoResolutionWidth > 0 ? VideoResolutionWidth : VideoModeWidth;
 	_ScaleInfo.ResolutionHeight = VideoResolutionHeight > 0 ? VideoResolutionHeight : VideoModeHeight;
+	World_Frame_Size(_ScaleInfo.ResolutionWidth, _ScaleInfo.ResolutionHeight, VideoWorldHeight, _ScaleInfo.WorldWidth, _ScaleInfo.WorldHeight);
 
 	if (_ScaleInfo.GameWidth <= 0 || _ScaleInfo.GameHeight <= 0 || _ScaleInfo.DrawableWidth <= 0 || _ScaleInfo.DrawableHeight <= 0) {
 		_ScaleInfo.DestX = 0;
@@ -160,11 +187,19 @@ static BackendScaleMode Backend_Scale_Mode(void)
 /// <summary>
 /// Picks the frame pixel that leaves a hole for the tactical map.
 /// </summary>
-/// <returns>int; VIDEO_TRANSPARENT_PIXEL while the interface is scaled apart from the map,
-/// or -1 while the map is drawn into the frame itself.</returns>
-static int Frame_Transparent_Pixel(int width, int height, int resolutionwidth, int resolutionheight)
+/// <returns>int; VIDEO_TRANSPARENT_PIXEL while the map is drawn at another scale than the
+/// interface, or -1 while the map is drawn into the frame itself.</returns>
+static int Frame_Transparent_Pixel(int width, int height, int resolutionwidth, int resolutionheight, int worldheight)
 {
-	if (resolutionwidth <= 0 || resolutionheight <= 0 || (resolutionwidth == width && resolutionheight == height)) {
+	if (resolutionwidth <= 0 || resolutionheight <= 0) {
+		return(-1);
+	}
+
+	int worldframewidth = 0;
+	int worldframeheight = 0;
+	World_Frame_Size(resolutionwidth, resolutionheight, worldheight, worldframewidth, worldframeheight);
+
+	if (worldframewidth == width && worldframeheight == height) {
 		return(-1);
 	}
 	return(VIDEO_TRANSPARENT_PIXEL);
@@ -241,7 +276,7 @@ bool Video_Init(NativeWindow const & window, int drawablewidth, int drawableheig
 
 	_Initialized = true;
 
-	if (!Backend_Set_Frame_Size(VideoModeWidth, VideoModeHeight, Frame_Transparent_Pixel(VideoModeWidth, VideoModeHeight, VideoResolutionWidth, VideoResolutionHeight))) {
+	if (!Backend_Set_Frame_Size(VideoModeWidth, VideoModeHeight, Frame_Transparent_Pixel(VideoModeWidth, VideoModeHeight, VideoResolutionWidth, VideoResolutionHeight, VideoWorldHeight))) {
 		Backend_Shutdown();
 		_Initialized = false;
 		return(false);
@@ -280,9 +315,9 @@ void Video_Shutdown(void)
 /// </summary>
 /// <param name="width">The new frame width.</param>
 /// <param name="height">The new frame height.</param>
-/// <param name="resolutionwidth">The width of the resolution the tactical map is drawn at,
-/// which differs from the frame's only while the interface is scaled.</param>
-/// <param name="resolutionheight">The height of that resolution.</param>
+/// <param name="resolutionwidth">The resolution's width, which differs from the frame's only
+/// while the interface is scaled.</param>
+/// <param name="resolutionheight">The resolution's height.</param>
 /// <returns>bool; Was the mode changed?</returns>
 bool Video_Set_Mode(int width, int height, int resolutionwidth, int resolutionheight)
 {
@@ -290,7 +325,7 @@ bool Video_Set_Mode(int width, int height, int resolutionwidth, int resolutionhe
 		return(false);
 	}
 
-	if (!Backend_Set_Frame_Size(width, height, Frame_Transparent_Pixel(width, height, resolutionwidth, resolutionheight))) {
+	if (!Backend_Set_Frame_Size(width, height, Frame_Transparent_Pixel(width, height, resolutionwidth, resolutionheight, VideoWorldHeight))) {
 		return(false);
 	}
 
@@ -304,6 +339,34 @@ bool Video_Set_Mode(int width, int height, int resolutionwidth, int resolutionhe
 
 	Update_Scale_Info();
 	Win_Cursor_Refresh();
+	_FrameIsDirty = true;
+	return(true);
+}
+
+
+/// <summary>
+/// Changes how many pixels of the tactical map the screen is tall.
+/// The caller replaces the tactical map's surfaces afterwards; this only prepares the frame
+/// and leaves the previous height in place when it fails.
+/// </summary>
+/// <param name="height">The new height, or zero to draw the map at the resolution.</param>
+/// <returns>bool; Was the height changed?</returns>
+bool Video_Set_World_Height(int height)
+{
+	if (!_Initialized) {
+		return(false);
+	}
+
+	if (!Backend_Set_Frame_Size(VideoModeWidth, VideoModeHeight, Frame_Transparent_Pixel(VideoModeWidth, VideoModeHeight, VideoResolutionWidth, VideoResolutionHeight, height))) {
+		return(false);
+	}
+
+	VideoWorldHeight = height;
+
+	// The surfaces the map's picture came from are about to be replaced.
+	_WorldVisible = false;
+
+	Update_Scale_Info();
 	_FrameIsDirty = true;
 	return(true);
 }

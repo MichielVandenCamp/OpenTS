@@ -66,6 +66,7 @@
 #include "surface.h"
 #include "tactical.h"
 #include "video.h"
+#include "viewzoom.h"
 
 #include "bench.hh"
 
@@ -389,6 +390,9 @@ void GScreenClass::Render(void)
 {
 	BStart(BENCH_GSCREEN_RENDER);
 
+	// A zoom replaces the map's surfaces, so it can only take effect between frames.
+	View_Zoom_Update();
+
 	Surface * oldpage = LogicalSurface;
 	LogicalSurface = CompositeSurface;
 
@@ -494,9 +498,9 @@ void Heal_Dialog_Controls(void)
 /// <summary>
 /// Fetches the surface the interface over the tactical map is drawn on.
 /// </summary>
-/// <returns>A surface of its own while the interface is scaled apart from the map, and the
-/// map's composite otherwise. The composite trades places with the tile surface as the map
-/// scrolls, so the result holds only until the map is next drawn.</returns>
+/// <returns>A surface of its own while the map is drawn at another scale than the interface,
+/// and the map's composite otherwise. The composite trades places with the tile surface as
+/// the map scrolls, so the result holds only until the map is next drawn.</returns>
 Surface * Tactical_UI_Surface(void)
 {
 	return(TacticalUISurface != NULL ? TacticalUISurface : CompositeSurface);
@@ -524,7 +528,8 @@ static Rect Zoomed_Source_Rect(Surface * surface)
 
 
 /// <summary>
-/// Presents the game screen while the interface is scaled apart from the tactical map.
+/// Presents the game screen while the tactical map is drawn at another scale than the
+/// interface.
 /// The interface over the view goes into the visible surface, and the map goes to the
 /// presenter as a picture of its own to show beneath it, so screen shake moves the map
 /// alone.
@@ -553,9 +558,9 @@ static void Present_Tactical_Layers(Surface & ui_surface)
 
 /// <summary>
 /// Puts the tactical map into the holes the interface leaves for it in a copy of the visible
-/// surface. While the interface is scaled, the visible surface holds the transparent color
-/// wherever the map shows through, so a capture needs the map stretched in to match the
-/// screen. Anything else is left alone.
+/// surface. While the map is drawn at another scale than the interface, the visible surface
+/// holds the transparent color wherever the map shows through, so a capture needs the map
+/// stretched in to match the screen. Anything else is left alone.
 /// </summary>
 /// <param name="surface">A copy of the visible surface, laid out as it is.</param>
 void Fill_Tactical_Holes(Surface & surface)

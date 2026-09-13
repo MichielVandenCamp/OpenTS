@@ -364,34 +364,7 @@ void DisplayClass::Set_View_Dimensions(Rect const & dimensions)
 	DebugString("Set_View_Dimensions(%d,%d,%d,%d)\n", dimensions.X, dimensions.Y, dimensions.Width, dimensions.Height);
 
 	TacticalScreenRect = dimensions;
-	TacticalRect = Tactical_Surface_Rect(dimensions);
-
-	if (TacticalMap != NULL) {
-		TacticalMap->Set_View_Dimensions(TacticalRect);
-
-		Hide_Mouse();
-
-		if (DepthBuffer != NULL) {
-			DebugString("Deleting ZBuffer\n");
-			delete DepthBuffer;
-			DepthBuffer = NULL;
-		}
-
-		DepthBuffer = new ZBuffer(TacticalRect);
-		DepthBuffer->Set_Scroll(ZBUFFER_MAX);
-		DebugString("Allocating ZBuffer (%dx%d)\n", TacticalRect.Width, TacticalRect.Height);
-
-		if (AlphaBuffer != NULL) {
-			DebugString("Deleting ABuffer\n");
-			delete AlphaBuffer;
-			AlphaBuffer = NULL;
-		}
-
-		AlphaBuffer = new ABuffer(TacticalRect);
-		DebugString("Allocating ABuffer (%dx%d)\n", TacticalRect.Width, TacticalRect.Height);
-
-		Show_Mouse();
-	}
+	Rescale_Tactical_View();
 
 	Map.Reposition_Sidebar();
 
@@ -428,6 +401,44 @@ void DisplayClass::Set_View_Dimensions(Rect const & dimensions)
 	Session.Messages.Set_Width(TacticalScreenRect.Width);
 
 	DebugString("Set_View_Dimensions(exit)\n");
+}
+
+
+/// <summary>
+/// Fits the tactical map's view on its own surface to the view on the screen at the map's
+/// current scale, and replaces the depth and alpha buffers to match. The view keeps its
+/// place on the screen, so the sidebar, tooltips, and message list are left alone.
+/// </summary>
+void DisplayClass::Rescale_Tactical_View(void)
+{
+	TacticalRect = Tactical_Surface_Rect(TacticalScreenRect);
+
+	if (TacticalMap != NULL) {
+		TacticalMap->Set_View_Dimensions(TacticalRect);
+
+		Hide_Mouse();
+
+		if (DepthBuffer != NULL) {
+			DebugString("Deleting ZBuffer\n");
+			delete DepthBuffer;
+			DepthBuffer = NULL;
+		}
+
+		DepthBuffer = new ZBuffer(TacticalRect);
+		DepthBuffer->Set_Scroll(ZBUFFER_MAX);
+		DebugString("Allocating ZBuffer (%dx%d)\n", TacticalRect.Width, TacticalRect.Height);
+
+		if (AlphaBuffer != NULL) {
+			DebugString("Deleting ABuffer\n");
+			delete AlphaBuffer;
+			AlphaBuffer = NULL;
+		}
+
+		AlphaBuffer = new ABuffer(TacticalRect);
+		DebugString("Allocating ABuffer (%dx%d)\n", TacticalRect.Width, TacticalRect.Height);
+
+		Show_Mouse();
+	}
 }
 
 

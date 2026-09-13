@@ -32,14 +32,17 @@ constexpr unsigned short VIDEO_TRANSPARENT_PIXEL = 0xF81F;
 // Where the game's frame lands inside the window. The destination keeps the resolution's
 // aspect ratio, so it is centered and the window may show bars on two of its sides. The
 // frame matches the resolution unless the interface is scaled, and is stretched over the
-// destination either way. Drawable dimensions and the destination rectangle are measured
-// in physical pixels.
+// destination either way. The world frame is the tactical map's, stretched over the same
+// destination. Drawable dimensions and the destination rectangle are measured in physical
+// pixels.
 struct VideoScaleInfo
 {
 	int GameWidth;
 	int GameHeight;
 	int ResolutionWidth;
 	int ResolutionHeight;
+	int WorldWidth;
+	int WorldHeight;
 	int DrawableWidth;
 	int DrawableHeight;
 	int DestX;
@@ -51,16 +54,22 @@ struct VideoScaleInfo
 };
 
 
-// The resolution the tactical map is drawn at. VideoModeWidth and VideoModeHeight hold the
-// frame the interface is drawn in, which differs only while the interface is scaled.
+// The resolution, whose shape the picture keeps in the window. VideoModeWidth and
+// VideoModeHeight hold the frame the interface is drawn in, which differs only while the
+// interface is scaled.
 extern int VideoResolutionWidth;
 extern int VideoResolutionHeight;
+
+// How many pixels of the tactical map the screen is tall, which sets how much of the map the
+// view shows. Zero draws the map at the resolution.
+extern int VideoWorldHeight;
 
 
 bool Video_Init(NativeWindow const & window, int drawablewidth, int drawableheight, int refreshrate);
 void Video_Shutdown(void);
 
 bool Video_Set_Mode(int width, int height, int resolutionwidth, int resolutionheight);
+bool Video_Set_World_Height(int height);
 void Video_On_Resize(int drawablewidth, int drawableheight);
 void Video_Set_Refresh_Rate(int refreshrate);
 
