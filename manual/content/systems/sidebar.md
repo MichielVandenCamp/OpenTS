@@ -109,6 +109,8 @@ Both mouse buttons act on press rather than on release. The table gives what eac
 
 Queuing is silent, so a second click on a cameo already building reads as nothing having happened until the count appears. Taking a queued copy before the object under construction is what makes the right click the way to undo a single click of over-ordering.
 
+Holding Shift turns a left click on a vehicle, infantry or aircraft cameo into five orders sent together. With nothing of its kind on order, the first starts it and the other four queue behind it; with the type on hold, the first resumes it. Each order passes [the queue](/systems/production/#the-queue) on its own, so the ones that do not fit under [`MaximumQueuedObjects`](/keys/maximumqueuedobjects/) or the type's build limit are dropped with [`ScoldSound`](/keys/scoldsound/). Shift has no effect on a structure cameo or on a finished object.
+
 Structures skip the queuing rows entirely, because they are never queued. While a house has any structure order outstanding — building, on hold, or finished and waiting to be placed — a left click on any *other* structure cameo is refused on the spot: the engine announces that there is no factory and sends nothing at all. The cameo the order belongs to still answers normally, resuming an order on hold and entering placement mode for a finished one; only while it is actively building is it refused like the rest.
 
 ## Scrolling the strips

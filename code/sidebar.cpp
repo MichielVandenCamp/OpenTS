@@ -78,6 +78,7 @@
 
 #include "_bench.h"
 #include "_convert.h"
+#include "_keyboar.h"
 #include "_map.h"
 #include "_mixfile.h"
 #include "_rtti.h"
@@ -100,6 +101,7 @@
 #include "goptions.h"
 #include "house.h"
 #include "incdec.h"
+#include "keyboard.h"
 #include "language/language.h"
 #include "map.h"
 #include "mixfile.h"
@@ -2420,6 +2422,9 @@ int SidebarClass::StripClass::SelectClass::Action(unsigned flags, KeyNumType & k
 
 			if (flags & LEFTPRESS) {
 
+				// Structures never queue, so a shift-click orders five of anything else only.
+				int const orders = (otype != RTTI_BUILDINGTYPE && Keyboard->Down(KN_LSHIFT)) ? 5 : 1;
+
 				if (factory != NULL && !factory->Is_Building()) {
 
 					/*
@@ -2470,7 +2475,9 @@ int SidebarClass::StripClass::SelectClass::Action(unsigned flags, KeyNumType & k
 						} else {
 							Speak(VOX_BUILDING);
 						}
-						OutList.push_back(EventClass(PlayerPtr->HeapID, EventClass::PRODUCE, otype, oid));
+						for (int i = 0; i < orders; i++) {
+							OutList.push_back(EventClass(PlayerPtr->HeapID, EventClass::PRODUCE, otype, oid));
+						}
 					}
 
 				} else {
@@ -2503,7 +2510,9 @@ int SidebarClass::StripClass::SelectClass::Action(unsigned flags, KeyNumType & k
 						produce = true;
 					}
 					if (produce) {
-						OutList.push_back(EventClass(PlayerPtr->HeapID, EventClass::PRODUCE, otype, oid));
+						for (int i = 0; i < orders; i++) {
+							OutList.push_back(EventClass(PlayerPtr->HeapID, EventClass::PRODUCE, otype, oid));
+						}
 					}
 				}
 			}
