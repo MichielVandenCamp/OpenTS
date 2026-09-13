@@ -742,7 +742,8 @@ bool CellClass::Is_Clear_To_Build(SpeedType loco, BuildingTypeClass * what, Hous
 					return(false);
 				}
 
-				if (Cell_Building() != NULL) {
+				BuildingClass * building = Cell_Building();
+				if (building != NULL && building->Owner_HouseClass() != who) {
 					return(false);
 				}
 			}
