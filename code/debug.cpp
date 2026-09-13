@@ -40,6 +40,7 @@
 #include "_logic.h"
 #include "_map.h"
 #include "_mono.h"
+#include "_rect.h"
 #include "_tactica.h"
 #include "tactical.h"
 #include "bench.h"
@@ -59,6 +60,7 @@
 #include "_surface.h"
 #include "surface.h"
 #include "dsurface.h"
+#include "vidscale.h"
 #include "weapon.h"
 
 #include "bench.hh"
@@ -112,7 +114,7 @@ void Debug_Key(unsigned input)
 
 		//Coord coord = TacticalMap->Pixel_To_Coord(Get_Mouse_Point());
 		Point2D mouse_pos = Get_Mouse_Point();
-		Cell tempcell = TacticalMap->Pixel_To_Cell(mouse_pos);
+		Cell tempcell = TacticalMap->Pixel_To_Cell(TacticalRect.Top_Left() + Screen_To_Tactical(mouse_pos));
 		CellClass *tempcellptr = &Map[tempcell];
 		int height = tempcellptr->Height * LEVEL_LEPTON_H + (tempcellptr->IsUnderBridge ? BRIDGE_LEPTON_HEIGHT : 0);
 		Coord coord (tempcell, height);

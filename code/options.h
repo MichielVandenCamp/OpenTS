@@ -147,6 +147,13 @@ class OptionsClass {
 		int ScreenHeight;
 
 		/*
+		 * This is how many pixels tall the screen the interface is laid out on is, or zero
+		 * for the resolution's own height. The tactical map keeps the resolution while the
+		 * interface is stretched over it, so a smaller value gives a larger interface.
+		 */
+		int UIHeight;
+
+		/*
 		 * If the movies are to be stretched to fill the screen, then this flag will be true.
 		 */
 		bool StretchMovies;

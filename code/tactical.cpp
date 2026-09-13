@@ -1406,7 +1406,7 @@ void Tactical::Draw_Placement(bool drawtrans)
 	}
 
 	Point2D mouse = MouseCursor->Get_Mouse_Point();
-	if (!TacticalRect.Is_Point_Within(mouse)) {
+	if (!TacticalScreenRect.Is_Point_Within(mouse)) {
 		return;
 	}
 

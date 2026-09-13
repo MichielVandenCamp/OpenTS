@@ -20,4 +20,5 @@ Surface * AlternateSurface;
 Surface * LogicalSurface;
 Surface * Unk2Surface;
 Surface * CompositeSurface;
+Surface * TacticalUISurface;
 Surface * PreviewSurface;

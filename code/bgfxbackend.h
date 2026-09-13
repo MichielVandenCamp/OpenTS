@@ -32,15 +32,37 @@ enum BackendScaleMode {
 };
 
 
+// Where a picture is drawn: part of the picture in its own pixels, the window rectangle it
+// is stretched over, and the window rectangle nothing is drawn outside of. A clip rectangle
+// with no area clips nothing. Window rectangles are in physical pixels.
+struct BackendPlacement
+{
+	int SourceX;
+	int SourceY;
+	int SourceWidth;
+	int SourceHeight;
+	int DestX;
+	int DestY;
+	int DestWidth;
+	int DestHeight;
+	int ClipX;
+	int ClipY;
+	int ClipWidth;
+	int ClipHeight;
+};
+
+
 // Drawable sizes are physical pixel dimensions supplied by the application shell.
 bool Backend_Init(NativeWindow const & window, int drawablewidth, int drawableheight, BackendRenderer renderer, bool vsync);
 void Backend_Shutdown(void);
 
-bool Backend_Set_Frame_Size(int width, int height);
+bool Backend_Set_Frame_Size(int width, int height, int transparentpixel);
+bool Backend_Set_World_Frame(void const * pixels, int pitch, int width, int height);
 void Backend_On_Resize(int drawablewidth, int drawableheight);
 
-// Uploads the frame and presents it. The pixels are 16 bit 565 and stay owned by the
-// caller; they are consumed before this returns.
-void Backend_Present(void const * pixels, int pitch, int destx, int desty, int destwidth, int destheight, BackendScaleMode mode);
+// Uploads the frame and presents it, over the last world picture when a placement for it is
+// given. The pixels are 16 bit 565 and stay owned by the caller; they are consumed before
+// this returns.
+void Backend_Present(void const * pixels, int pitch, int destx, int desty, int destwidth, int destheight, BackendScaleMode mode, BackendPlacement const * world);
 
 char const * Backend_Renderer_Name(void);

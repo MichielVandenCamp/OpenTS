@@ -15,3 +15,7 @@ typedef TRect<int> Rect;
 extern Rect SidebarRect;
 extern Rect TacticalRect;
 extern Rect VisibleRect;
+
+// Where the tactical map sits on the screen. TacticalRect is the same view on the map's own
+// surface, which differs in size whenever the interface is scaled apart from the map.
+extern Rect TacticalScreenRect;

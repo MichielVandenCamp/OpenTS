@@ -762,7 +762,7 @@ static bool Get_All(SaveStreamClass & stream, bool save_net)
 	temp.Width -= SidebarClass::SIDE_WIDTH;
 	temp.Height -= 16;
 
-	Allocate_Surfaces(VisibleRect, Rect(0, 0, temp.Width, VisibleRect.Height), Rect(0, 0, temp.Width, VisibleRect.Height), Rect(0, 0, SidebarClass::SIDE_WIDTH, VisibleRect.Height));
+	Allocate_Game_Surfaces(temp);
 
 	Map.Set_View_Dimensions(temp);
 

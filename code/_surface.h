@@ -25,4 +25,8 @@ extern Surface * Unk2Surface; /// unused
 
 extern Surface * CompositeSurface;
 
+// The interface drawn over the tactical map while the map has a surface of its own. It is
+// NULL when the interface draws onto CompositeSurface along with the map.
+extern Surface * TacticalUISurface;
+
 extern Surface * PreviewSurface; /// unused

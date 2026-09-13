@@ -9,7 +9,8 @@
 
 // The engine's side of the presenter. The game draws its frame into the visible surface
 // as it always has; this decides when that frame reaches the screen and where in the
-// window it lands, and hands it to the renderer behind video.h.
+// window it lands, and hands it to the renderer behind video.h. While the interface is
+// scaled, a picture of the tactical map is handed over as well and drawn beneath it.
 
 #include "always.h"
 
@@ -22,10 +23,13 @@
 #include "globals.h"
 #include "goptions.h"
 #include "misc.h"
+#include "rect.h"
 #include "surface.h"
+#include "uiscale.h"
 #include "wincursor.h"
 
 #include <cstdlib>
+#include <cstring>
 
 
 /*
@@ -34,6 +38,14 @@
  */
 int VideoModeWidth = 0;
 int VideoModeHeight = 0;
+
+/*
+ * The resolution the tactical map is drawn at, which the picture is fitted to the window by.
+ * The frame has the same size unless the interface is scaled, in which case the frame is
+ * stretched over the area the resolution fills.
+ */
+int VideoResolutionWidth = 0;
+int VideoResolutionHeight = 0;
 
 /*
  * Is the game running in a framed, resizable window rather than in a borderless one
@@ -54,6 +66,19 @@ static unsigned int _PresentInterval = 16;
 // Presents can nest, because a dialog repainting itself presents from inside the paint
 // that the engine's own present provoked.
 static bool _Presenting = false;
+
+// The last picture of the tactical map handed over while the interface is scaled. It is
+// copied so that a present at any later moment shows a finished picture, and it reaches the
+// renderer only when a present happens.
+static unsigned short * _WorldPixels = NULL;
+static int _WorldWidth = 0;
+static int _WorldHeight = 0;
+static bool _WorldVisible = false;
+static bool _WorldChanged = false;
+static Rect _WorldSource(0, 0, 0, 0);
+static Rect _WorldDest(0, 0, 0, 0);
+static int _WorldShiftX = 0;
+static int _WorldShiftY = 0;
 
 
 /// <summary>
@@ -77,13 +102,15 @@ static void Update_Present_Interval(int refreshrate)
 
 /// <summary>
 /// Works out where the game's frame sits inside the window.
-/// The frame keeps its shape, so it is grown by whichever of the two axes runs out first
-/// and centered in what is left over.
+/// The picture keeps the resolution's shape, so it is grown by whichever of the two axes
+/// runs out first and centered in what is left over. The frame is stretched over it.
 /// </summary>
 static void Update_Scale_Info(void)
 {
 	_ScaleInfo.GameWidth = VideoModeWidth;
 	_ScaleInfo.GameHeight = VideoModeHeight;
+	_ScaleInfo.ResolutionWidth = VideoResolutionWidth > 0 ? VideoResolutionWidth : VideoModeWidth;
+	_ScaleInfo.ResolutionHeight = VideoResolutionHeight > 0 ? VideoResolutionHeight : VideoModeHeight;
 
 	if (_ScaleInfo.GameWidth <= 0 || _ScaleInfo.GameHeight <= 0 || _ScaleInfo.DrawableWidth <= 0 || _ScaleInfo.DrawableHeight <= 0) {
 		_ScaleInfo.DestX = 0;
@@ -95,16 +122,16 @@ static void Update_Scale_Info(void)
 		return;
 	}
 
-	double scalex = (double)_ScaleInfo.DrawableWidth / (double)_ScaleInfo.GameWidth;
-	double scaley = (double)_ScaleInfo.DrawableHeight / (double)_ScaleInfo.GameHeight;
+	double scalex = (double)_ScaleInfo.DrawableWidth / (double)_ScaleInfo.ResolutionWidth;
+	double scaley = (double)_ScaleInfo.DrawableHeight / (double)_ScaleInfo.ResolutionHeight;
 	double scale = (scalex < scaley) ? scalex : scaley;
 
 	if (Options.IntegerScaling && scale >= 1.0) {
 		scale = (double)(int)scale;
 	}
 
-	_ScaleInfo.DestWidth = (int)((double)_ScaleInfo.GameWidth * scale);
-	_ScaleInfo.DestHeight = (int)((double)_ScaleInfo.GameHeight * scale);
+	_ScaleInfo.DestWidth = (int)((double)_ScaleInfo.ResolutionWidth * scale);
+	_ScaleInfo.DestHeight = (int)((double)_ScaleInfo.ResolutionHeight * scale);
 	_ScaleInfo.DestX = (_ScaleInfo.DrawableWidth - _ScaleInfo.DestWidth) / 2;
 	_ScaleInfo.DestY = (_ScaleInfo.DrawableHeight - _ScaleInfo.DestHeight) / 2;
 	_ScaleInfo.ScaleX = (float)((double)_ScaleInfo.DestWidth / (double)_ScaleInfo.GameWidth);
@@ -127,6 +154,60 @@ static BackendScaleMode Backend_Scale_Mode(void)
 		default:
 			return(BACKEND_SCALE_PIXELART);
 	}
+}
+
+
+/// <summary>
+/// Picks the frame pixel that leaves a hole for the tactical map.
+/// </summary>
+/// <returns>int; VIDEO_TRANSPARENT_PIXEL while the interface is scaled apart from the map,
+/// or -1 while the map is drawn into the frame itself.</returns>
+static int Frame_Transparent_Pixel(int width, int height, int resolutionwidth, int resolutionheight)
+{
+	if (resolutionwidth <= 0 || resolutionheight <= 0 || (resolutionwidth == width && resolutionheight == height)) {
+		return(-1);
+	}
+	return(VIDEO_TRANSPARENT_PIXEL);
+}
+
+
+/// <summary>
+/// Works out where the tactical map's picture is drawn in the window, handing the picture
+/// to the renderer first if it has changed since the last present.
+/// </summary>
+/// <returns>bool; Is there a picture to draw?</returns>
+static bool Place_World(BackendPlacement & placement)
+{
+	if (_WorldPixels == NULL || _WorldSource.Width <= 0 || _WorldSource.Height <= 0 || _ScaleInfo.GameWidth <= 0 || _ScaleInfo.GameHeight <= 0) {
+		return(false);
+	}
+
+	if (_WorldChanged) {
+		if (!Backend_Set_World_Frame(_WorldPixels, _WorldWidth * (int)sizeof(unsigned short), _WorldWidth, _WorldHeight)) {
+			return(false);
+		}
+		_WorldChanged = false;
+	}
+
+	int left = _ScaleInfo.DestX + Scale_Frame_Edge(_WorldDest.X, _ScaleInfo.GameWidth, _ScaleInfo.DestWidth);
+	int right = _ScaleInfo.DestX + Scale_Frame_Edge(_WorldDest.X + _WorldDest.Width, _ScaleInfo.GameWidth, _ScaleInfo.DestWidth);
+	int top = _ScaleInfo.DestY + Scale_Frame_Edge(_WorldDest.Y, _ScaleInfo.GameHeight, _ScaleInfo.DestHeight);
+	int bottom = _ScaleInfo.DestY + Scale_Frame_Edge(_WorldDest.Y + _WorldDest.Height, _ScaleInfo.GameHeight, _ScaleInfo.DestHeight);
+
+	placement.SourceX = _WorldSource.X;
+	placement.SourceY = _WorldSource.Y;
+	placement.SourceWidth = _WorldSource.Width;
+	placement.SourceHeight = _WorldSource.Height;
+	placement.DestWidth = right - left;
+	placement.DestHeight = bottom - top;
+	placement.DestX = left + Scale_Frame_Edge(_WorldShiftX, _WorldSource.Width, placement.DestWidth);
+	placement.DestY = top + Scale_Frame_Edge(_WorldShiftY, _WorldSource.Height, placement.DestHeight);
+	placement.ClipX = left;
+	placement.ClipY = top;
+	placement.ClipWidth = right - left;
+	placement.ClipHeight = bottom - top;
+
+	return(placement.ClipWidth > 0 && placement.ClipHeight > 0);
 }
 
 
@@ -160,7 +241,7 @@ bool Video_Init(NativeWindow const & window, int drawablewidth, int drawableheig
 
 	_Initialized = true;
 
-	if (!Backend_Set_Frame_Size(VideoModeWidth, VideoModeHeight)) {
+	if (!Backend_Set_Frame_Size(VideoModeWidth, VideoModeHeight, Frame_Transparent_Pixel(VideoModeWidth, VideoModeHeight, VideoResolutionWidth, VideoResolutionHeight))) {
 		Backend_Shutdown();
 		_Initialized = false;
 		return(false);
@@ -185,6 +266,10 @@ void Video_Shutdown(void)
 	Backend_Shutdown();
 	_Initialized = false;
 	_FrameIsDirty = false;
+
+	delete [] _WorldPixels;
+	_WorldPixels = NULL;
+	_WorldVisible = false;
 }
 
 
@@ -195,19 +280,27 @@ void Video_Shutdown(void)
 /// </summary>
 /// <param name="width">The new frame width.</param>
 /// <param name="height">The new frame height.</param>
+/// <param name="resolutionwidth">The width of the resolution the tactical map is drawn at,
+/// which differs from the frame's only while the interface is scaled.</param>
+/// <param name="resolutionheight">The height of that resolution.</param>
 /// <returns>bool; Was the mode changed?</returns>
-bool Video_Set_Mode(int width, int height)
+bool Video_Set_Mode(int width, int height, int resolutionwidth, int resolutionheight)
 {
-	if (!_Initialized || width <= 0 || height <= 0) {
+	if (!_Initialized || width <= 0 || height <= 0 || resolutionwidth <= 0 || resolutionheight <= 0) {
 		return(false);
 	}
 
-	if (!Backend_Set_Frame_Size(width, height)) {
+	if (!Backend_Set_Frame_Size(width, height, Frame_Transparent_Pixel(width, height, resolutionwidth, resolutionheight))) {
 		return(false);
 	}
 
 	VideoModeWidth = width;
 	VideoModeHeight = height;
+	VideoResolutionWidth = resolutionwidth;
+	VideoResolutionHeight = resolutionheight;
+
+	// The surfaces the map's picture came from are about to be replaced.
+	_WorldVisible = false;
 
 	Update_Scale_Info();
 	Win_Cursor_Refresh();
@@ -249,6 +342,65 @@ void Video_Set_Refresh_Rate(int refreshrate)
 
 
 /// <summary>
+/// Shows a picture of the tactical map beneath the frame. The map shows through wherever
+/// the frame holds VIDEO_TRANSPARENT_PIXEL. The picture is copied, so the surface may be
+/// drawn on again straight away.
+/// </summary>
+/// <param name="surface">The surface holding the picture.</param>
+/// <param name="source">The part of the surface to show.</param>
+/// <param name="dest">Where in the frame to show it.</param>
+/// <param name="shiftx">How far to push the picture sideways within that place, in pixels
+/// of the surface. The strip it uncovers stays black.</param>
+/// <param name="shifty">How far to push the picture down within that place.</param>
+void Video_Show_World(Surface & surface, Rect const & source, Rect const & dest, int shiftx, int shifty)
+{
+	if (!_Initialized) {
+		return;
+	}
+
+	DSurface & dsurface = (DSurface &)surface;
+	unsigned char const * pixels = (unsigned char const *)dsurface.Get_Buffer();
+	int width = dsurface.Get_Width();
+	int height = dsurface.Get_Height();
+
+	if (pixels == NULL || width <= 0 || height <= 0) {
+		return;
+	}
+
+	if (_WorldPixels == NULL || _WorldWidth != width || _WorldHeight != height) {
+		delete [] _WorldPixels;
+		_WorldPixels = new unsigned short[width * height];
+		_WorldWidth = width;
+		_WorldHeight = height;
+	}
+
+	for (int y = 0; y < height; y++) {
+		memcpy(_WorldPixels + y * width, pixels + y * dsurface.Stride(), width * sizeof(unsigned short));
+	}
+
+	_WorldSource = source;
+	_WorldDest = dest;
+	_WorldShiftX = shiftx;
+	_WorldShiftY = shifty;
+	_WorldVisible = true;
+	_WorldChanged = true;
+	_FrameIsDirty = true;
+}
+
+
+/// <summary>
+/// Stops showing the tactical map beneath the frame.
+/// </summary>
+void Video_Hide_World(void)
+{
+	if (_WorldVisible) {
+		_WorldVisible = false;
+		_FrameIsDirty = true;
+	}
+}
+
+
+/// <summary>
 /// Records that the visible surface has been drawn to since the last present.
 /// </summary>
 void Video_Mark_Dirty(void)
@@ -274,7 +426,14 @@ void Video_Present(void)
 	}
 
 	_Presenting = true;
-	Backend_Present(pixels, surface->Stride(), _ScaleInfo.DestX, _ScaleInfo.DestY, _ScaleInfo.DestWidth, _ScaleInfo.DestHeight, Backend_Scale_Mode());
+
+	BackendPlacement world;
+	BackendPlacement const * world_placement = NULL;
+	if (_WorldVisible && Place_World(world)) {
+		world_placement = &world;
+	}
+
+	Backend_Present(pixels, surface->Stride(), _ScaleInfo.DestX, _ScaleInfo.DestY, _ScaleInfo.DestWidth, _ScaleInfo.DestHeight, Backend_Scale_Mode(), world_placement);
 	_Presenting = false;
 
 	_FrameIsDirty = false;

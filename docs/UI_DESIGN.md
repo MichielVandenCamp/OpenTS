@@ -37,6 +37,15 @@ pixels into system-memory surfaces. `Video_Present` hands `VisibleSurface` to
 `Backend_Present`, which uploads it as one texture, draws one quad with the
 embedded `vs_ocornut_imgui` program on view `VIEW_PRESENT` (with a
 `VIEW_PRESCALE` pass for the pixel-art filter), and calls `bgfx::frame()`.
+When `UIHeight` lays the interface out on a frame of another size than the
+resolution, the tactical map is drawn at the resolution into its own
+`CompositeSurface`, and the interface over it into `TacticalUISurface`.
+`Update_Visible_Surface` then copies the map to `Video_Show_World`, and the
+backend draws that picture first, with its own `VIEW_PRESCALE_WORLD` pass, and
+blends the frame over it with `VIDEO_TRANSPARENT_PIXEL` as the transparent
+color. `TacticalScreenRect` holds the map's place in the frame and
+`TacticalRect` the same view on the map's surface; `Screen_To_Tactical` and
+`Tactical_To_Screen` convert between them.
 bgfx runs single-threaded because presents happen from inside dialog paint
 handlers; `_Presenting` guards the recursion. Presents are paced to the refresh
 interval and happen only when the frame is dirty. The mouse pointer is a
@@ -129,7 +138,8 @@ Limits, chosen to keep the work bounded:
   required methods; the rest stays default until a screen needs it.
 - No arbitrary layering of native and GPU UI. The coexistence rule under
   [Input and focus](#input-and-focus) is the whole policy.
-- No user UI scale setting yet. Documents follow the frame scale.
+- No UI scale of the shell's own. Documents follow the frame scale, which
+  `UIHeight` already sets apart from the tactical map.
 - The exception and assertion dialogs stay plain Win32. They must work when
   the renderer is the thing that failed.
 

@@ -36,34 +36,56 @@ static const bgfx::EmbeddedShader _EmbeddedShaders[] = {
 };
 
 
-// The view that magnifies the frame when the pixel art filter needs an intermediate
-// target, and the one that draws onto the window. Views render in ascending order, so
-// the magnify pass must carry the lower id for the present pass to sample its output
-// from this frame rather than the last one.
-static const bgfx::ViewId VIEW_PRESCALE = 0;
-static const bgfx::ViewId VIEW_PRESENT = 1;
+// The views that magnify the world picture and the frame when the pixel art filter needs an
+// intermediate target, and the one that draws onto the window. Views render in ascending
+// order, so the magnify passes must carry the lower ids for the present pass to sample their
+// output from this frame rather than the last one.
+static const bgfx::ViewId VIEW_PRESCALE_WORLD = 0;
+static const bgfx::ViewId VIEW_PRESCALE = 1;
+static const bgfx::ViewId VIEW_PRESENT = 2;
+
+// A frame with transparent pixels is blended over the world picture. Its pixels are either
+// opaque or wholly transparent black, so they already count as premultiplied.
+static const uint64_t STATE_OPAQUE = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A;
+static const uint64_t STATE_BLENDED = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE, BGFX_STATE_BLEND_INV_SRC_ALPHA);
+
+
+// A 16 bit 565 picture held in a texture. When the hardware cannot sample that format, or
+// the picture has a transparent pixel, it is widened to 32 bits on the way in instead.
+struct BackendPicture
+{
+	bgfx::TextureHandle Texture;
+	int Width;
+	int Height;
+	bool Is565;
+	int TransparentPixel;
+	unsigned int * ConvertBuffer;
+};
+
+// The intermediate target the pixel art filter magnifies a picture through.
+struct PrescaleTarget
+{
+	bgfx::FrameBufferHandle Handle;
+	int Width;
+	int Height;
+};
 
 
 static bool _Initialized = false;
 
-static bgfx::TextureHandle _FrameTexture = BGFX_INVALID_HANDLE;
+static BackendPicture _Frame = { BGFX_INVALID_HANDLE, 0, 0, false, -1, NULL };
+static BackendPicture _World = { BGFX_INVALID_HANDLE, 0, 0, false, -1, NULL };
+static PrescaleTarget _FramePrescale = { BGFX_INVALID_HANDLE, 0, 0 };
+static PrescaleTarget _WorldPrescale = { BGFX_INVALID_HANDLE, 0, 0 };
+
 static bgfx::ProgramHandle _Program = BGFX_INVALID_HANDLE;
 static bgfx::UniformHandle _TextureSampler = BGFX_INVALID_HANDLE;
-static bgfx::FrameBufferHandle _PrescaleTarget = BGFX_INVALID_HANDLE;
 static bgfx::VertexLayout _VertexLayout;
 
-static int _FrameWidth = 0;
-static int _FrameHeight = 0;
-static int _PrescaleWidth = 0;
-static int _PrescaleHeight = 0;
 static int _DrawableWidth = 0;
 static int _DrawableHeight = 0;
 static unsigned int _ResetFlags = BGFX_RESET_FLIP_AFTER_RENDER;
 
-// True while the frame texture holds the game's own 565 layout. When the hardware cannot
-// sample that format the frame is widened to 32 bits on the way in instead.
-static bool _FrameIs565 = false;
-static unsigned int * _ConvertBuffer = NULL;
 static unsigned int _ConvertTable[65536];
 
 
@@ -164,7 +186,7 @@ static void Build_Convert_Table(void)
 /// <summary>
 /// Submits one textured rectangle covering the given destination.
 /// </summary>
-static void Submit_Quad(bgfx::ViewId view, bgfx::TextureHandle texture, float x, float y, float width, float height, unsigned int samplerflags, bool flipv = false)
+static void Submit_Quad(bgfx::ViewId view, bgfx::TextureHandle texture, float x, float y, float width, float height, float u0, float v0, float u1, float v1, unsigned int samplerflags, uint64_t state)
 {
 	bgfx::TransientVertexBuffer buffer;
 
@@ -177,19 +199,16 @@ static void Submit_Quad(bgfx::ViewId view, bgfx::TextureHandle texture, float x,
 	BackendVertex * vertex = (BackendVertex *)buffer.data;
 	const unsigned int white = 0xFFFFFFFF;
 
-	const float vtop = flipv ? 1.0f : 0.0f;
-	const float vbottom = flipv ? 0.0f : 1.0f;
-
-	vertex[0] = { x, y, 0.0f, vtop, white };
-	vertex[1] = { x + width, y, 1.0f, vtop, white };
-	vertex[2] = { x + width, y + height, 1.0f, vbottom, white };
-	vertex[3] = { x, y, 0.0f, vtop, white };
-	vertex[4] = { x + width, y + height, 1.0f, vbottom, white };
-	vertex[5] = { x, y + height, 0.0f, vbottom, white };
+	vertex[0] = { x, y, u0, v0, white };
+	vertex[1] = { x + width, y, u1, v0, white };
+	vertex[2] = { x + width, y + height, u1, v1, white };
+	vertex[3] = { x, y, u0, v0, white };
+	vertex[4] = { x + width, y + height, u1, v1, white };
+	vertex[5] = { x, y + height, u0, v1, white };
 
 	bgfx::setVertexBuffer(0, &buffer);
 	bgfx::setTexture(0, _TextureSampler, texture, samplerflags);
-	bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A);
+	bgfx::setState(state);
 	bgfx::submit(view, _Program);
 }
 
@@ -229,44 +248,191 @@ static void Set_View_Transform(bgfx::ViewId view, int width, int height)
 
 
 /// <summary>
-/// Discards the intermediate target the pixel art filter magnifies through.
+/// Discards an intermediate target the pixel art filter magnifies through.
 /// </summary>
-static void Destroy_Prescale_Target(void)
+static void Destroy_Prescale_Target(PrescaleTarget & target)
 {
-	if (bgfx::isValid(_PrescaleTarget)) {
-		bgfx::destroy(_PrescaleTarget);
-		_PrescaleTarget = BGFX_INVALID_HANDLE;
+	if (bgfx::isValid(target.Handle)) {
+		bgfx::destroy(target.Handle);
+		target.Handle = BGFX_INVALID_HANDLE;
 	}
-	_PrescaleWidth = 0;
-	_PrescaleHeight = 0;
+	target.Width = 0;
+	target.Height = 0;
 }
 
 
 /// <summary>
-/// Makes sure the pixel art filter has an intermediate target of the requested size.
+/// Makes sure an intermediate target for the pixel art filter has the requested size.
 /// </summary>
 /// <returns>bool; Is a target of that size ready to render into?</returns>
-static bool Ensure_Prescale_Target(int width, int height)
+static bool Ensure_Prescale_Target(PrescaleTarget & target, int width, int height)
 {
-	if (bgfx::isValid(_PrescaleTarget) && _PrescaleWidth == width && _PrescaleHeight == height) {
+	if (bgfx::isValid(target.Handle) && target.Width == width && target.Height == height) {
 		return(true);
 	}
 
-	Destroy_Prescale_Target();
+	Destroy_Prescale_Target(target);
 
 	const bgfx::Caps * caps = bgfx::getCaps();
 	if (width <= 0 || height <= 0 || width > caps->limits.maxTextureSize || height > caps->limits.maxTextureSize) {
 		return(false);
 	}
 
-	_PrescaleTarget = bgfx::createFrameBuffer((uint16_t)width, (uint16_t)height, bgfx::TextureFormat::BGRA8, BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
-	if (!bgfx::isValid(_PrescaleTarget)) {
+	target.Handle = bgfx::createFrameBuffer((uint16_t)width, (uint16_t)height, bgfx::TextureFormat::BGRA8, BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+	if (!bgfx::isValid(target.Handle)) {
 		return(false);
 	}
 
-	_PrescaleWidth = width;
-	_PrescaleHeight = height;
+	target.Width = width;
+	target.Height = height;
 	return(true);
+}
+
+
+/// <summary>
+/// Releases a picture's texture and the buffer it was widened in.
+/// </summary>
+static void Release_Picture(BackendPicture & picture)
+{
+	if (bgfx::isValid(picture.Texture)) {
+		bgfx::destroy(picture.Texture);
+		picture.Texture = BGFX_INVALID_HANDLE;
+	}
+
+	delete [] picture.ConvertBuffer;
+	picture.ConvertBuffer = NULL;
+	picture.Width = 0;
+	picture.Height = 0;
+}
+
+
+/// <summary>
+/// Makes sure a picture has a texture of the requested size, replacing any earlier one.
+/// </summary>
+/// <param name="transparentpixel">The 565 value that is drawn wholly transparent, or -1 for
+/// an opaque picture.</param>
+/// <returns>bool; Is a texture of that size ready to receive the picture?</returns>
+static bool Prepare_Picture(BackendPicture & picture, int width, int height, int transparentpixel)
+{
+	if (bgfx::isValid(picture.Texture) && picture.Width == width && picture.Height == height && picture.TransparentPixel == transparentpixel) {
+		return(true);
+	}
+
+	Release_Picture(picture);
+
+	// bgfx names packed formats from their low bits up, so its B5G6R5 is the layout the
+	// game already draws in. Emulated support would convert every upload on the way
+	// through, which is what the fallback below does more cheaply.
+	const bgfx::Caps * caps = bgfx::getCaps();
+	picture.Is565 = transparentpixel < 0 && (caps->formats[bgfx::TextureFormat::B5G6R5] & BGFX_CAPS_FORMAT_TEXTURE_2D) != 0;
+	picture.TransparentPixel = transparentpixel;
+
+	picture.Texture = bgfx::createTexture2D((uint16_t)width, (uint16_t)height, false, 1, picture.Is565 ? bgfx::TextureFormat::B5G6R5 : bgfx::TextureFormat::BGRA8);
+	if (!bgfx::isValid(picture.Texture)) {
+		return(false);
+	}
+
+	if (!picture.Is565) {
+		if (_ConvertTable[0xFFFF] == 0) {
+			Build_Convert_Table();
+		}
+		picture.ConvertBuffer = new unsigned int[width * height];
+	}
+
+	picture.Width = width;
+	picture.Height = height;
+	return(true);
+}
+
+
+/// <summary>
+/// Copies a 565 picture into its texture, widening it on the way when the texture is not 565.
+/// </summary>
+static void Upload_Picture(BackendPicture & picture, void const * pixels, int pitch)
+{
+	if (picture.Is565) {
+		bgfx::updateTexture2D(picture.Texture, 0, 0, 0, 0, (uint16_t)picture.Width, (uint16_t)picture.Height, bgfx::copy(pixels, (uint32_t)(picture.Height * pitch)), (uint16_t)pitch);
+		return;
+	}
+
+	if (picture.ConvertBuffer == NULL) {
+		return;
+	}
+
+	for (int y = 0; y < picture.Height; y++) {
+		unsigned short const * source = (unsigned short const *)((char const *)pixels + y * pitch);
+		unsigned int * dest = picture.ConvertBuffer + y * picture.Width;
+		if (picture.TransparentPixel < 0) {
+			for (int x = 0; x < picture.Width; x++) {
+				dest[x] = _ConvertTable[source[x]];
+			}
+		} else {
+			for (int x = 0; x < picture.Width; x++) {
+				dest[x] = (source[x] == picture.TransparentPixel) ? 0 : _ConvertTable[source[x]];
+			}
+		}
+	}
+	bgfx::updateTexture2D(picture.Texture, 0, 0, 0, 0, (uint16_t)picture.Width, (uint16_t)picture.Height, bgfx::copy(picture.ConvertBuffer, (uint32_t)(picture.Width * picture.Height * 4)), (uint16_t)(picture.Width * 4));
+}
+
+
+/// <summary>
+/// Draws part of a picture onto the window with the requested filter.
+/// The pixel art filter keeps whole pixels whole. An exact multiple needs nothing but point
+/// sampling; anything else is magnified to the next whole multiple with point sampling and
+/// then shrunk to the window smoothly, which keeps edges sharp without the uneven pixel
+/// sizes that point sampling alone would give.
+/// </summary>
+static void Submit_Picture(BackendPicture const & picture, bgfx::ViewId prescaleview, PrescaleTarget & target, BackendPlacement const & placement, BackendScaleMode mode, uint64_t state)
+{
+	if (placement.SourceWidth <= 0 || placement.SourceHeight <= 0 || picture.Width <= 0 || picture.Height <= 0) {
+		return;
+	}
+
+	bgfx::TextureHandle source = picture.Texture;
+	unsigned int samplerflags = BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
+	bool flipv = false;
+
+	if (mode == BACKEND_SCALE_NEAREST) {
+		samplerflags |= BGFX_SAMPLER_POINT;
+	}
+
+	if (mode == BACKEND_SCALE_PIXELART && placement.DestWidth > placement.SourceWidth && placement.DestHeight > placement.SourceHeight) {
+		if ((placement.DestWidth % placement.SourceWidth) == 0 && (placement.DestHeight % placement.SourceHeight) == 0) {
+			samplerflags |= BGFX_SAMPLER_POINT;
+		} else {
+			int scale = (placement.DestWidth + placement.SourceWidth - 1) / placement.SourceWidth;
+			int scaley = (placement.DestHeight + placement.SourceHeight - 1) / placement.SourceHeight;
+			if (scaley > scale) {
+				scale = scaley;
+			}
+
+			if (Ensure_Prescale_Target(target, picture.Width * scale, picture.Height * scale)) {
+				bgfx::setViewFrameBuffer(prescaleview, target.Handle);
+				bgfx::setViewClear(prescaleview, BGFX_CLEAR_COLOR, 0x000000FF);
+				Set_View_Transform(prescaleview, target.Width, target.Height);
+				Submit_Quad(prescaleview, picture.Texture, 0.0f, 0.0f, (float)target.Width, (float)target.Height, 0.0f, 0.0f, 1.0f, 1.0f, BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_SAMPLER_POINT, STATE_OPAQUE);
+				source = bgfx::getTexture(target.Handle);
+				flipv = bgfx::getCaps()->originBottomLeft;
+			}
+		}
+	}
+
+	float u0 = (float)placement.SourceX / (float)picture.Width;
+	float u1 = (float)(placement.SourceX + placement.SourceWidth) / (float)picture.Width;
+	float v0 = (float)placement.SourceY / (float)picture.Height;
+	float v1 = (float)(placement.SourceY + placement.SourceHeight) / (float)picture.Height;
+
+	if (flipv) {
+		v0 = 1.0f - v0;
+		v1 = 1.0f - v1;
+	}
+
+	if (placement.ClipWidth > 0 && placement.ClipHeight > 0) {
+		bgfx::setScissor((uint16_t)placement.ClipX, (uint16_t)placement.ClipY, (uint16_t)placement.ClipWidth, (uint16_t)placement.ClipHeight);
+	}
+
+	Submit_Quad(VIEW_PRESENT, source, (float)placement.DestX, (float)placement.DestY, (float)placement.DestWidth, (float)placement.DestHeight, u0, v0, u1, v1, samplerflags, state);
 }
 
 
@@ -355,6 +521,10 @@ bool Backend_Init(NativeWindow const & window, int drawablewidth, int drawablehe
 		return(false);
 	}
 
+	// The frame is blended over the world picture, so the two must reach the window in the
+	// order they are submitted rather than whatever order bgfx finds cheapest.
+	bgfx::setViewMode(VIEW_PRESENT, bgfx::ViewMode::Sequential);
+
 	_Initialized = true;
 	return(true);
 }
@@ -369,12 +539,11 @@ void Backend_Shutdown(void)
 		return;
 	}
 
-	Destroy_Prescale_Target();
+	Destroy_Prescale_Target(_FramePrescale);
+	Destroy_Prescale_Target(_WorldPrescale);
+	Release_Picture(_Frame);
+	Release_Picture(_World);
 
-	if (bgfx::isValid(_FrameTexture)) {
-		bgfx::destroy(_FrameTexture);
-		_FrameTexture = BGFX_INVALID_HANDLE;
-	}
 	if (bgfx::isValid(_TextureSampler)) {
 		bgfx::destroy(_TextureSampler);
 		_TextureSampler = BGFX_INVALID_HANDLE;
@@ -384,13 +553,8 @@ void Backend_Shutdown(void)
 		_Program = BGFX_INVALID_HANDLE;
 	}
 
-	delete [] _ConvertBuffer;
-	_ConvertBuffer = NULL;
-
 	bgfx::shutdown();
 
-	_FrameWidth = 0;
-	_FrameHeight = 0;
 	_Initialized = false;
 }
 
@@ -398,45 +562,38 @@ void Backend_Shutdown(void)
 /// <summary>
 /// Points the renderer at a frame of the given size, replacing any earlier one.
 /// </summary>
+/// <param name="transparentpixel">The 565 value that lets the world picture show through,
+/// or -1 for a frame that covers it completely.</param>
 /// <returns>bool; Is a texture of that size ready to receive frames?</returns>
-bool Backend_Set_Frame_Size(int width, int height)
+bool Backend_Set_Frame_Size(int width, int height, int transparentpixel)
 {
 	if (!_Initialized || width <= 0 || height <= 0) {
 		return(false);
 	}
 
-	if (bgfx::isValid(_FrameTexture) && _FrameWidth == width && _FrameHeight == height) {
-		return(true);
-	}
+	return(Prepare_Picture(_Frame, width, height, transparentpixel));
+}
 
-	if (bgfx::isValid(_FrameTexture)) {
-		bgfx::destroy(_FrameTexture);
-		_FrameTexture = BGFX_INVALID_HANDLE;
-	}
 
-	// bgfx names packed formats from their low bits up, so its B5G6R5 is the layout the
-	// game already draws in. Emulated support would convert every upload on the way
-	// through, which is what the fallback below does more cheaply.
-	const bgfx::Caps * caps = bgfx::getCaps();
-	_FrameIs565 = (caps->formats[bgfx::TextureFormat::B5G6R5] & BGFX_CAPS_FORMAT_TEXTURE_2D) != 0;
-
-	_FrameTexture = bgfx::createTexture2D((uint16_t)width, (uint16_t)height, false, 1, _FrameIs565 ? bgfx::TextureFormat::B5G6R5 : bgfx::TextureFormat::BGRA8);
-	if (!bgfx::isValid(_FrameTexture)) {
+/// <summary>
+/// Uploads the picture that is drawn beneath the frame when a present asks for it.
+/// </summary>
+/// <param name="pixels">The picture's top left pixel, in 16 bit 565.</param>
+/// <param name="pitch">The bytes between one row of the picture and the next.</param>
+/// <param name="width">The picture's width.</param>
+/// <param name="height">The picture's height.</param>
+/// <returns>bool; Is the picture ready to be drawn?</returns>
+bool Backend_Set_World_Frame(void const * pixels, int pitch, int width, int height)
+{
+	if (!_Initialized || pixels == NULL || width <= 0 || height <= 0) {
 		return(false);
 	}
 
-	delete [] _ConvertBuffer;
-	_ConvertBuffer = NULL;
-
-	if (!_FrameIs565) {
-		if (_ConvertTable[0xFFFF] == 0) {
-			Build_Convert_Table();
-		}
-		_ConvertBuffer = new unsigned int[width * height];
+	if (!Prepare_Picture(_World, width, height, -1)) {
+		return(false);
 	}
 
-	_FrameWidth = width;
-	_FrameHeight = height;
+	Upload_Picture(_World, pixels, pitch);
 	return(true);
 }
 
@@ -469,10 +626,13 @@ void Backend_On_Resize(int drawablewidth, int drawableheight)
 /// <param name="desty">Where the top edge of the frame lands in the window.</param>
 /// <param name="destwidth">How wide the frame is drawn.</param>
 /// <param name="destheight">How tall the frame is drawn.</param>
-/// <param name="mode">How the frame is filtered when it is drawn larger than it is.</param>
-void Backend_Present(void const * pixels, int pitch, int destx, int desty, int destwidth, int destheight, BackendScaleMode mode)
+/// <param name="mode">How the frame and the world picture are filtered when they are drawn
+/// larger than they are.</param>
+/// <param name="world">Where the last world picture is drawn beneath the frame, or NULL to
+/// draw the frame alone.</param>
+void Backend_Present(void const * pixels, int pitch, int destx, int desty, int destwidth, int destheight, BackendScaleMode mode, BackendPlacement const * world)
 {
-	if (!_Initialized || pixels == NULL || !bgfx::isValid(_FrameTexture)) {
+	if (!_Initialized || pixels == NULL || !bgfx::isValid(_Frame.Texture)) {
 		return;
 	}
 
@@ -481,51 +641,7 @@ void Backend_Present(void const * pixels, int pitch, int destx, int desty, int d
 		return;
 	}
 
-	if (_FrameIs565) {
-		bgfx::updateTexture2D(_FrameTexture, 0, 0, 0, 0, (uint16_t)_FrameWidth, (uint16_t)_FrameHeight, bgfx::copy(pixels, (uint32_t)(_FrameHeight * pitch)), (uint16_t)pitch);
-	} else if (_ConvertBuffer != NULL) {
-		for (int y = 0; y < _FrameHeight; y++) {
-			unsigned short const * source = (unsigned short const *)((char const *)pixels + y * pitch);
-			unsigned int * dest = _ConvertBuffer + y * _FrameWidth;
-			for (int x = 0; x < _FrameWidth; x++) {
-				dest[x] = _ConvertTable[source[x]];
-			}
-		}
-		bgfx::updateTexture2D(_FrameTexture, 0, 0, 0, 0, (uint16_t)_FrameWidth, (uint16_t)_FrameHeight, bgfx::copy(_ConvertBuffer, (uint32_t)(_FrameWidth * _FrameHeight * 4)), (uint16_t)(_FrameWidth * 4));
-	}
-
-	bgfx::TextureHandle source = _FrameTexture;
-	unsigned int samplerflags = BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
-	bool from_prescale = false;
-
-	if (mode == BACKEND_SCALE_NEAREST) {
-		samplerflags |= BGFX_SAMPLER_POINT;
-	}
-
-	// The pixel art filter keeps whole pixels whole. An exact multiple needs nothing but
-	// point sampling; anything else is magnified to the next whole multiple with point
-	// sampling and then shrunk to the window smoothly, which keeps edges sharp without
-	// the uneven pixel sizes that point sampling alone would give.
-	if (mode == BACKEND_SCALE_PIXELART && destwidth > _FrameWidth && destheight > _FrameHeight) {
-		if ((destwidth % _FrameWidth) == 0 && (destheight % _FrameHeight) == 0) {
-			samplerflags |= BGFX_SAMPLER_POINT;
-		} else {
-			int scale = (destwidth + _FrameWidth - 1) / _FrameWidth;
-			int scaley = (destheight + _FrameHeight - 1) / _FrameHeight;
-			if (scaley > scale) {
-				scale = scaley;
-			}
-
-			if (Ensure_Prescale_Target(_FrameWidth * scale, _FrameHeight * scale)) {
-				bgfx::setViewFrameBuffer(VIEW_PRESCALE, _PrescaleTarget);
-				bgfx::setViewClear(VIEW_PRESCALE, BGFX_CLEAR_COLOR, 0x000000FF);
-				Set_View_Transform(VIEW_PRESCALE, _PrescaleWidth, _PrescaleHeight);
-				Submit_Quad(VIEW_PRESCALE, _FrameTexture, 0.0f, 0.0f, (float)_PrescaleWidth, (float)_PrescaleHeight, BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP | BGFX_SAMPLER_POINT);
-				source = bgfx::getTexture(_PrescaleTarget);
-				from_prescale = true;
-			}
-		}
-	}
+	Upload_Picture(_Frame, pixels, pitch);
 
 	// Clearing the whole window is what paints the bars beside a frame that does not
 	// share the window's shape.
@@ -533,8 +649,12 @@ void Backend_Present(void const * pixels, int pitch, int destx, int desty, int d
 	bgfx::setViewClear(VIEW_PRESENT, BGFX_CLEAR_COLOR, 0x000000FF);
 	Set_View_Transform(VIEW_PRESENT, _DrawableWidth, _DrawableHeight);
 
-	bool flipv = from_prescale && bgfx::getCaps()->originBottomLeft;
-	Submit_Quad(VIEW_PRESENT, source, (float)destx, (float)desty, (float)destwidth, (float)destheight, samplerflags, flipv);
+	if (world != NULL && bgfx::isValid(_World.Texture)) {
+		Submit_Picture(_World, VIEW_PRESCALE_WORLD, _WorldPrescale, *world, mode, STATE_OPAQUE);
+	}
+
+	BackendPlacement frame = { 0, 0, _Frame.Width, _Frame.Height, destx, desty, destwidth, destheight, 0, 0, 0, 0 };
+	Submit_Picture(_Frame, VIEW_PRESCALE, _FramePrescale, frame, mode, _Frame.TransparentPixel < 0 ? STATE_OPAQUE : STATE_BLENDED);
 
 	bgfx::frame();
 }

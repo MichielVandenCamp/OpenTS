@@ -69,6 +69,7 @@
 #include "_keyboar.h"
 #include "_map.h"
 #include "_palette.h"
+#include "_rect.h"
 #include "_rules.h"
 #include "_source.h"
 #include "_surface.h"
@@ -116,6 +117,7 @@
 #include "surface.h"
 #include "tactical.h"
 #include "theme.h"
+#include "vidscale.h"
 #include "voc.h"
 #include "vox.h"
 #include "wsproto.h"
@@ -978,26 +980,28 @@ static void Resize_Tactical_View(bool flag)
 
 	if (flag) {
 
-		Rect hidden(0, 0, Options.ScreenWidth-_sidebar_width, Options.ScreenHeight);
-		Rect comp(0, 0, Options.ScreenWidth, Options.ScreenHeight);
-		Rect tile(0, 0, Options.ScreenWidth, Options.ScreenHeight);
-		Rect sidebar(0, 0, _sidebar_width, Options.ScreenHeight);
-		Allocate_Surfaces(hidden, comp, tile, sidebar);
+		Rect view(0, 0, VisibleRect.Width, VisibleRect.Height);
+		Rect tactical = Tactical_Surface_Rect(view);
+		Rect hidden(0, 0, VisibleRect.Width-_sidebar_width, VisibleRect.Height);
+		Rect comp(0, 0, tactical.Width, tactical.Y + tactical.Height);
+		Rect sidebar(0, 0, _sidebar_width, VisibleRect.Height);
+		Rect tactical_ui = Interface_Is_Scaled() ? Rect(0, 0, view.Width, VisibleRect.Height) : Rect(0, 0, 0, 0);
+		Allocate_Surfaces(hidden, comp, comp, sidebar, tactical_ui);
 
-		Rect view(0, 0, Options.ScreenWidth, Options.ScreenHeight);
 		Map.Set_View_Dimensions(view);
 
 		Sleep(2);
 
 	} else {
 
-		Rect hidden(0, 0, Options.ScreenWidth-_sidebar_width, Options.ScreenHeight);
-		Rect comp(0, 0, Options.ScreenWidth-_sidebar_width, Options.ScreenHeight);
-		Rect tile(0, 0, Options.ScreenWidth-_sidebar_width, Options.ScreenHeight);
-		Rect sidebar(0, 0, _sidebar_width, Options.ScreenHeight);
-		Allocate_Surfaces(hidden, comp, tile, sidebar);
+		Rect view(0, _tab_height, VisibleRect.Width-_sidebar_width, VisibleRect.Height-_tab_height);
+		Rect tactical = Tactical_Surface_Rect(view);
+		Rect hidden(0, 0, VisibleRect.Width-_sidebar_width, VisibleRect.Height);
+		Rect comp(0, 0, tactical.Width, tactical.Y + tactical.Height);
+		Rect sidebar(0, 0, _sidebar_width, VisibleRect.Height);
+		Rect tactical_ui = Interface_Is_Scaled() ? Rect(0, 0, view.Width, VisibleRect.Height) : Rect(0, 0, 0, 0);
+		Allocate_Surfaces(hidden, comp, comp, sidebar, tactical_ui);
 
-		Rect view(0, _tab_height, Options.ScreenWidth-_sidebar_width, Options.ScreenHeight-_tab_height);
 		Map.Set_View_Dimensions(view);
 
 		Sleep(2);

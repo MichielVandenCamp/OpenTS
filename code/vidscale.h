@@ -9,10 +9,12 @@
 
 // Conversions between the window's own pixels and the frame the game draws in. The two
 // differ whenever the frame is scaled or letterboxed to fit the window, so anything that
-// reads a position from Windows has to come through here before the game sees it.
+// reads a position from Windows has to come through here before the game sees it. The
+// frame and the tactical map's own surface differ in turn while the interface is scaled.
 
 #pragma once
 
+#include "rect.h"
 #include "win.h"
 
 
@@ -25,3 +27,8 @@ void Game_Point_To_Screen(POINT & point);
 
 void Clamp_To_Game(POINT & point);
 void Get_Logical_Cursor_Pos(HWND window, POINT & point);
+
+bool Interface_Is_Scaled(void);
+Rect Tactical_Surface_Rect(Rect const & view);
+Point2D Screen_To_Tactical(Point2D const & point);
+Point2D Tactical_To_Screen(Point2D const & point);
