@@ -6042,7 +6042,8 @@ bool Allocate_Surfaces(const Rect & hidden_rect, const Rect & composite_rect, co
 /// <summary>
 /// Allocates the game's drawing surfaces for a screen of the visible size.
 /// The tactical map's surfaces are sized for the view as the map draws it, which differs
-/// from the view on the screen while the interface is scaled.
+/// from the view on the screen whenever the map is drawn at another scale than the
+/// interface.
 /// </summary>
 /// <param name="view">Where the tactical view sits on the screen.</param>
 /// <returns>bool; Were the surfaces allocated?</returns>
@@ -6053,11 +6054,48 @@ bool Allocate_Game_Surfaces(Rect const & view)
 	Rect sidebar(0, 0, SidebarClass::SIDE_WIDTH, VisibleRect.Height);
 	Rect tactical_ui(0, 0, 0, 0);
 
-	if (Interface_Is_Scaled()) {
+	if (Tactical_Is_Scaled()) {
 		tactical_ui = Rect(0, 0, view.Width, VisibleRect.Height);
 	}
 
 	return(Allocate_Surfaces(VisibleRect, composite, composite, sidebar, tactical_ui));
+}
+
+
+/// <summary>
+/// Replaces the tactical map's drawing surfaces to suit the view at the map's current scale,
+/// keeping every other surface. The new surfaces start out black, so the caller has the
+/// whole screen redrawn.
+/// </summary>
+/// <param name="view">Where the tactical view sits on the screen.</param>
+void Allocate_Tactical_Surfaces(Rect const & view)
+{
+	Rect tactical = Tactical_Surface_Rect(view);
+	int width = tactical.Width;
+	int height = tactical.Y + tactical.Height;
+
+	bool was_logical = LogicalSurface != NULL && (LogicalSurface == CompositeSurface || LogicalSurface == TileSurface || LogicalSurface == TacticalUISurface);
+
+	delete CompositeSurface;
+	delete TileSurface;
+	delete TacticalUISurface;
+	TacticalUISurface = NULL;
+
+	CompositeSurface = new DSurface(width, height);
+	CompositeSurface->Fill(0);
+	TileSurface = new DSurface(width, height);
+	TileSurface->Fill(0);
+
+	if (Tactical_Is_Scaled()) {
+		TacticalUISurface = new DSurface(view.Width, VisibleRect.Height);
+		TacticalUISurface->Fill(0);
+	}
+
+	if (was_logical) {
+		LogicalSurface = CompositeSurface;
+	}
+
+	DebugString("Tactical surfaces (%dx%d)\n", width, height);
 }
 
 

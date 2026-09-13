@@ -19,6 +19,7 @@
 #include "init.h"
 #include "movies.h"
 #include "video.h"
+#include "viewzoom.h"
 
 
 static bool _HandlingMouseWheel = false;
@@ -55,7 +56,8 @@ void Game_Window_On_Right_Mouse_Up(void)
 
 
 /// <summary>
-/// Applies a mouse wheel step to the sidebar.
+/// Applies a mouse wheel step to the tactical view's zoom while the pointer is over the map,
+/// and to the sidebar otherwise.
 /// </summary>
 void Game_Window_On_Mouse_Wheel(int delta)
 {
@@ -64,6 +66,8 @@ void Game_Window_On_Mouse_Wheel(int delta)
 	}
 
 	_HandlingMouseWheel = true;
-	Execute_Command(delta < 0 ? "SidebarDown" : "SidebarUp");
+	if (!View_Zoom_Wheel(delta)) {
+		Execute_Command(delta < 0 ? "SidebarDown" : "SidebarUp");
+	}
 	_HandlingMouseWheel = false;
 }

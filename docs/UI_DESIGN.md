@@ -37,9 +37,10 @@ pixels into system-memory surfaces. `Video_Present` hands `VisibleSurface` to
 `Backend_Present`, which uploads it as one texture, draws one quad with the
 embedded `vs_ocornut_imgui` program on view `VIEW_PRESENT` (with a
 `VIEW_PRESCALE` pass for the pixel-art filter), and calls `bgfx::frame()`.
-When `UIHeight` lays the interface out on a frame of another size than the
-resolution, the tactical map is drawn at the resolution into its own
-`CompositeSurface`, and the interface over it into `TacticalUISurface`.
+The tactical map is drawn on a frame whose height the view's zoom sets
+(`VideoWorldHeight`). When that frame differs from the one `UIHeight` lays the
+interface out on, the map is drawn into its own `CompositeSurface`, and the
+interface over it into `TacticalUISurface`.
 `Update_Visible_Surface` then copies the map to `Video_Show_World`, and the
 backend draws that picture first, with its own `VIEW_PRESCALE_WORLD` pass, and
 blends the frame over it with `VIDEO_TRANSPARENT_PIXEL` as the transparent

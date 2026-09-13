@@ -985,7 +985,7 @@ static void Resize_Tactical_View(bool flag)
 		Rect hidden(0, 0, VisibleRect.Width-_sidebar_width, VisibleRect.Height);
 		Rect comp(0, 0, tactical.Width, tactical.Y + tactical.Height);
 		Rect sidebar(0, 0, _sidebar_width, VisibleRect.Height);
-		Rect tactical_ui = Interface_Is_Scaled() ? Rect(0, 0, view.Width, VisibleRect.Height) : Rect(0, 0, 0, 0);
+		Rect tactical_ui = Tactical_Is_Scaled() ? Rect(0, 0, view.Width, VisibleRect.Height) : Rect(0, 0, 0, 0);
 		Allocate_Surfaces(hidden, comp, comp, sidebar, tactical_ui);
 
 		Map.Set_View_Dimensions(view);
@@ -999,7 +999,7 @@ static void Resize_Tactical_View(bool flag)
 		Rect hidden(0, 0, VisibleRect.Width-_sidebar_width, VisibleRect.Height);
 		Rect comp(0, 0, tactical.Width, tactical.Y + tactical.Height);
 		Rect sidebar(0, 0, _sidebar_width, VisibleRect.Height);
-		Rect tactical_ui = Interface_Is_Scaled() ? Rect(0, 0, view.Width, VisibleRect.Height) : Rect(0, 0, 0, 0);
+		Rect tactical_ui = Tactical_Is_Scaled() ? Rect(0, 0, view.Width, VisibleRect.Height) : Rect(0, 0, 0, 0);
 		Allocate_Surfaces(hidden, comp, comp, sidebar, tactical_ui);
 
 		Map.Set_View_Dimensions(view);
